@@ -43,6 +43,12 @@ Academic treatment of how markets actually work at the transaction level — pri
 [HBS PDF](https://www.hbs.edu/businesshistory/Documents/origin-and-development-of-markets.pdf)
 Historical survey of how formal markets evolved from informal exchange. Physical infrastructure (market halls, standardized measures) preceded institutional infrastructure (rules, clearing).
 
+**Jean-Charles Rochet & Jean Tirole — "Platform Competition in Two-Sided Markets" (2003)**
+*Journal of the European Economic Association*. Nobel-winning framework for two-sided market economics — pricing structure, network effects, and competition. *Exchangification relevance*: Exchanges are two-sided markets with maximum standardization. Understanding when platforms tip toward exchange dynamics requires this framework.
+
+**Yakov Amihud & Haim Mendelson — "Asset Pricing and the Bid-Ask Spread" (1986)**
+Foundational work on how liquidity (tight spreads, transparent pricing) attracts participants and improves asset prices. *Exchangification relevance*: Explains the self-reinforcing dynamics of exchanges — liquidity begets liquidity — and why the marketplace→exchange transition tends to be one-directional.
+
 ---
 
 ## Platform and Marketplace Theory
@@ -173,3 +179,9 @@ Platform decay theory. Platforms start by being good to users, then extract valu
 
 **Nassim Taleb — "Antifragile" (2012)**
 Standardization creates fragility. Exchange-traded categories may be efficient but brittle. *Exchangification relevance*: The strongest counterargument — exchangification optimizes for efficiency at the cost of resilience.
+
+**Clayton Christensen — "The Innovator's Dilemma" (1997)**
+As products commoditize, competitive dynamics shift from product features to efficiency and price — exactly the conditions that favor exchange structures over relationship-driven marketplaces. *Exchangification relevance*: AI accelerates the commoditization cycle Christensen described, pushing more categories into the zone where exchanges become viable.
+
+**Scott Patterson — "The Quants" (2010)**
+History of quantitative trading and how mathematical precision transformed financial markets. *Exchangification relevance*: Shows the end-state when exchanges meet algorithmic participants — pattern recognition, speed, and scale dominate. This is the future for every exchangified category.
