@@ -128,6 +128,28 @@ Each category is assessed on: current market structure, what standardization is 
 - **Barriers**: Human variability, employment regulation (EU Platform Work Directive 2026), worker protection concerns, the fact that labor is not truly fungible
 - **Timeline**: 3-7 years for highly standardized roles (data entry, basic customer service, content moderation). Skilled/creative labor will resist full exchangification.
 
+### Food / Restaurant Delivery
+- **Stage**: Marketplace (delivery logistics approaching exchange)
+- **Exchange readiness**: 🟡
+- **Market size**: ~$150B (global food delivery)
+- **What standardization is needed**: Restaurant quality grading, delivery time/reliability standardization, menu item classification
+- **AI capability that enables it**: Demand forecasting per restaurant/time slot, dynamic pricing based on demand/prep time/distance, route optimization, kitchen automation
+- **Current state**: DoorDash, Uber Eats, Grubhub already use exchange-like mechanics for the *delivery logistics* layer (real-time matching of drivers to orders with dynamic pricing). Ghost kitchens (Reef, Wonder) standardize the *production* layer. Miso Robotics and others automating cooking itself.
+- **Key players**: DoorDash, Uber Eats, Grubhub (delivery); Reef, Wonder (ghost kitchens); Miso Robotics (kitchen automation)
+- **Barriers**: Restaurant quality variance is the product differentiator, not a bug. Chefs resist standardization. Food is experiential/cultural.
+- **Timeline**: Delivery logistics already exchange-like. Kitchen production may partially exchangify via ghost kitchens (2-5 years). Restaurant dining will remain marketplace/bazaar — the variance *is* the value.
+
+### Attention / Influence (Creator Economy)
+- **Stage**: Marketplace
+- **Exchange readiness**: 🟡
+- **Market size**: ~$100B+ (creator economy)
+- **What standardization is needed**: Audience verification (real vs. fake followers), engagement quality scoring, sponsorship outcome prediction, standardized pricing per impression/engagement
+- **AI capability that enables it**: Audience verification and fraud detection (bot identification), brand-audience matching algorithms, performance prediction models, standardized micro-sponsorship pricing
+- **Current state**: Platforms like HypeAuditor and AspireIQ verify audiences. Micro-influencer platforms (Billo, GRIN) enable many small standardized partnerships. But high-end creator partnerships remain deeply relationship-driven.
+- **Key players**: HypeAuditor, AspireIQ, GRIN, Billo, Izea, Upfluence
+- **Barriers**: Each creator is unique (anti-fungible). Brand fit requires judgment. Top-tier creators have too much leverage for exchange dynamics. Audience authenticity remains hard to verify.
+- **Timeline**: 3-7 years for micro-influencer/commodity tier. Standardized CPM-based micro-sponsorships will become exchange-traded. Premium creators will remain marketplace/bespoke.
+
 ### Data
 - **Stage**: Marketplace (with exchange aspirations)
 - **Exchange readiness**: 🟡
@@ -191,6 +213,8 @@ Each category is assessed on: current market structure, what standardization is 
 | Routine legal work | Marketplace | 🟡 Emerging | LLM task decomposition | 2027-2032 |
 | Education/Credentials | Bazaar→Marketplace | 🟡 Emerging | AI assessment, micro-credentials | 2028-2035 |
 | Staffing (standardized) | Marketplace | 🟡 Emerging | AI skill grading, agent labor | 2026-2032 |
+| Food delivery | Marketplace (logistics ≈ exchange) | 🟡 Emerging | Demand forecasting, dynamic pricing | Delivery: now; Production: 2027+ |
+| Attention/Influence | Marketplace | 🟡 Emerging | Audience verification, micro-sponsorship pricing | 2027-2032 |
 | Data | Marketplace | 🟡 Emerging | Quality grading, standardization | 2028-2035 |
 | Healthcare services | Regulated marketplace | 🔴 Far | AI diagnostics, billing | 2032+ |
 | Professional services | Bazaar/Marketplace | 🔴 Far | AI augmentation only | Partial only |
