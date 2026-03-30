@@ -13,3 +13,14 @@
 ## The one-paragraph version
 
 Markets evolve through stages: **bazaar** (fragmented, local) → **marketplace** (aggregated, but bespoke) → **exchange** (standardized, fungible, instant). The transition from marketplace to exchange has historically required *standardization* — you can't trade something on an exchange until you can grade it, classify it, and make units interchangeable. This is why commodities were exchangified centuries ago, but services, creative work, and complex goods remain stuck in the marketplace phase. **AI changes this.** AI can grade quality, classify complexity, decompose services into fungible units, and price risk — in real time, at scale. Categories that seemed permanently marketplace-bound are on the verge of exchangification.
+
+---
+
+## TODOs
+
+> **Convention:** TODOs must always be explicit, concrete action items — not vague aspirations. Each item should describe exactly what needs to be done, by whom or in which file, and what "done" looks like.
+
+- [ ] Merge thesis branch (`benrapport/exchangification-thesis`) into `main` so all content lives on the default branch
+- [ ] Add `.context/` directory with session notes (currently only on old Conductor branch)
+- [ ] Review OPEN_QUESTIONS.md and convert the most promising questions into specific research tasks
+- [ ] Decide on a category from CATEGORY_MAP.md to deep-dive first and create a dedicated analysis doc
