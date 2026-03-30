@@ -198,6 +198,144 @@ Each category is assessed on: current market structure, what standardization is 
 
 ---
 
+---
+
+## 🟢 Newly Identified — Actively Exchangifying
+
+### AI Inference Tokens / Compute
+- **Stage**: Commodity emerging → Exchange
+- **Exchange readiness**: 🟢🟢
+- **Market size**: $10B+ (spot market, 2026); projected $50B+ by 2030
+- **What standardization is needed**: Token-as-unit already standardized (input/output tokens per model); quality varies by model capability, latency, throughput
+- **AI capability that enables it**: Tokens are natively digital, metered, and fungible. AI workload routing can match tasks to cheapest-sufficient model automatically.
+- **Current state**: A March 2026 arxiv paper proposes standardized token futures contracts, arguing they are "technically and economically feasible." Spot market exceeds $10B. Simulation shows token futures can reduce enterprise compute cost volatility by 62-78%. Optimal launch window estimated 2027-2028. Already seeing aggregators (OpenRouter, Martian) that route across providers on price/quality.
+- **Key players**: OpenAI, Anthropic, Google, Mistral (producers); OpenRouter, Martian, Unify (aggregators/routers); potential futures exchange operators TBD
+- **Barriers**: Model differentiation (not all tokens are equal), rapid capability changes invalidate contracts, vendor lock-in via fine-tuning
+- **Timeline**: Spot market exists now. Futures contracts likely 2027-2028. This may be the fastest bazaar-to-exchange transition in history.
+
+### B2B Procurement
+- **Stage**: Marketplace → Exchange
+- **Exchange readiness**: 🟢
+- **Market size**: $15T+ in annual B2B spend
+- **What standardization is needed**: Supplier qualification scoring, product specification standardization, contract term templates
+- **AI capability that enables it**: AI agents autonomously discover, qualify, and negotiate with suppliers. Automated RFQ generation and bid comparison. Supplier risk scoring.
+- **Current state**: Gartner predicts 90% of B2B purchases will be handled by AI agents within 3 years, channeling $15T+ through automated exchanges. Forrester predicts procurement agents will "scale negotiation across hundreds of suppliers simultaneously." Autonomous sourcing platforms deliver pre-qualified supplier shortlists in hours vs. weeks.
+- **Key players**: Amazon Business, SAP Ariba, Coupa, Jaggaer; emerging AI-native: Globality, Scoutbee, Fairmarkit
+- **Barriers**: Relationship-driven purchasing in complex categories, regulatory compliance requirements, supplier resistance
+- **Timeline**: 2-4 years for standardized commodity procurement. 5-8 years for complex categories.
+
+### IT Services / Software Engineering
+- **Stage**: Marketplace → Exchange (for standard tasks)
+- **Exchange readiness**: 🟢
+- **Market size**: $1.2T (global IT services)
+- **What standardization is needed**: Task classification (bug fix, feature implementation, code review), quality grading, outcome measurement
+- **AI capability that enables it**: AI coding agents commoditize standard engineering tasks. Code quality can be algorithmically graded. AI companies are acquiring services firms, collapsing the stack.
+- **Current state**: AI coding agents (Devin, Cursor, GitHub Copilot Workspace) can complete standardized tasks end-to-end. The big AI labs (OpenAI, Anthropic, Google) are expanding into enterprise services — traditionally the domain of Accenture, Infosys, Wipro. Standard coding tasks are becoming fungible.
+- **Key players**: GitHub Copilot, Cursor, Devin (AI agents); Accenture, Infosys, Wipro (incumbents under pressure)
+- **Barriers**: Complex system architecture requires human judgment, institutional knowledge, team dynamics
+- **Timeline**: 2-5 years for standardized tasks (CRUD apps, migrations, bug fixes). Complex architecture remains marketplace/bespoke.
+
+---
+
+## 🟡 Newly Identified — Beginning to Exchangify
+
+### Pharmaceutical R&D / Drug Discovery
+- **Stage**: Bazaar/Marketplace → Exchange (for early-stage assets)
+- **Exchange readiness**: 🟡
+- **Market size**: $50-80B annually in licensing/partnering deal value; $4-5B AI drug discovery market (2024), projected $10-15B by 2028
+- **What standardization is needed**: Molecule valuation scoring, target-indication pair grading, probability-of-success metrics
+- **AI capability that enables it**: Generative chemistry creates standardized molecular representations (SMILES, molecular graphs). AI assigns probability-of-success scores to drug candidates — analogous to credit ratings. Foundation models for biology create shared "grammars" making biological assets comparable.
+- **Current state**: Royalty Pharma ($20B+ market cap) already trades pharmaceutical royalties as financial instruments. AI platforms (Recursion, Insilico Medicine, Isomorphic Labs) generate and score candidates systematically. Isomorphic Labs signed deals worth $1.7B (Eli Lilly) and $1.2B (Novartis). TriNetX operates a clinical trial participant exchange across 250M+ patient records.
+- **Key players**: Royalty Pharma, DRI Healthcare (royalty trading); Recursion, Insilico Medicine, Isomorphic Labs (AI discovery); TriNetX, Deep 6 AI (trial matching)
+- **Barriers**: Regulatory complexity (FDA approval is not commoditizable), high failure rates make "grading" unreliable, IP protection concerns
+- **Timeline**: 3-7 years for early-stage asset trading (pre-clinical molecules, target-indication pairs). Late-stage development remains bespoke.
+
+### Cybersecurity / Cyber Risk
+- **Stage**: Marketplace → Exchange (for standardized risk classes)
+- **Exchange readiness**: 🟡
+- **Market size**: ~$15B (cyber insurance, 2025), growing 25%+ annually
+- **What standardization is needed**: Risk quantification scoring, attack surface grading, standardized policy terms, loss modeling
+- **AI capability that enables it**: Automated security posture scoring, continuous attack surface monitoring, predictive loss modeling, claims automation
+- **Current state**: Companies like Coalition, At-Bay, and Corvus use AI to score and price cyber risk in real time. SecurityScorecard and BitSight provide standardized outside-in risk ratings. Insurance-linked securities (ILS) for cyber are emerging but nascent. Lloyd's has begun requiring standalone cyber policies with standardized terms.
+- **Key players**: Coalition, At-Bay, Corvus/Travelers (AI-native insurers); SecurityScorecard, BitSight, CyberCube (risk scoring); Artemis (ILS)
+- **Barriers**: Correlated/systemic risk (single vulnerability can hit all policies), rapidly evolving threat landscape, limited actuarial data, regulatory uncertainty
+- **Timeline**: 3-5 years for standardized SMB cyber insurance. Complex enterprise cyber risk remains relationship-driven.
+
+### Energy Storage / Distributed Energy
+- **Stage**: Marketplace → Exchange
+- **Exchange readiness**: 🟡
+- **Market size**: ~$50B+ (distributed energy resources); $15B+ (battery storage market, growing 30%+ annually)
+- **What standardization is needed**: Storage capacity as tradeable units (MWh), standardized dispatch protocols, performance grading of storage assets
+- **AI capability that enables it**: AI-driven battery dispatch optimization, real-time arbitrage between wholesale price peaks/troughs, virtual power plant aggregation, grid balancing algorithms
+- **Current state**: Tesla's Virtual Power Plant aggregates home batteries into dispatchable grid resources. Octopus Energy's Kraken platform optimizes across distributed assets. EPEX SPOT and Nord Pool already trade intraday energy. The transition is from bilateral PPA contracts to exchange-traded distributed energy units.
+- **Key players**: Tesla (VPP), Octopus Energy/Kraken, Stem Inc., Fluence, AutoGrid; EPEX SPOT, Nord Pool (exchanges)
+- **Barriers**: Physical grid constraints, regulatory fragmentation (state/country level), interconnection queues, storage degradation modeling
+- **Timeline**: 3-7 years for battery storage arbitrage to become exchange-traded. Distributed generation follows.
+
+### Music / IP Royalty Trading
+- **Stage**: Marketplace → Exchange
+- **Exchange readiness**: 🟡
+- **Market size**: ~$30B (global recorded music); $2B+ (royalty trading market, growing rapidly)
+- **What standardization is needed**: Royalty stream valuation models, catalog grading (hit potential, decay rate, genre classification), fractional ownership units
+- **AI capability that enables it**: AI predicts future royalty streams from streaming data, classifies catalog quality, generates synthetic performance data for valuation. AI-generated music creates near-zero-cost commodity content tier.
+- **Current state**: Royalty Exchange auctions music royalty streams to investors. Hipgnosis Songs Fund (now under Blackstone) manages $2B+ in song catalogs as financial assets. SongVest enables fractional ownership of royalty streams. AI-generated music (Suno, Udio) creates a commodity content tier that competes with human-created stock music.
+- **Key players**: Royalty Exchange, Hipgnosis/Blackstone, ANote Music, SongVest (royalty trading); Suno, Udio (AI generation); Spotify, Apple Music (distribution/pricing)
+- **Barriers**: Copyright complexity, artist resistance to commoditization, emotional/cultural value of music, legal uncertainty around AI-generated content
+- **Timeline**: 3-5 years for royalty trading to become more liquid/exchange-like. AI-generated stock music is already commodity-priced.
+
+### Productivity Software / SaaS
+- **Stage**: Marketplace → Exchange
+- **Exchange readiness**: 🟡
+- **Market size**: $58B (productivity software, per Gartner)
+- **What standardization is needed**: Capability benchmarking, API interoperability, outcome-based pricing
+- **AI capability that enables it**: AI agents use tools interchangeably — when the agent can operate any spreadsheet, any email client, any CRM, the tool itself becomes fungible. The value shifts to the agent layer.
+- **Current state**: Gartner projects a "$58 billion upheaval in productivity software" as AI agents challenge dominant office tools. When AI agents can use any tool, switching costs collapse. Outcome-based pricing ("per task completed") replaces seat-based pricing.
+- **Key players**: Microsoft, Google, Notion, Coda (incumbents); AI-native alternatives emerging across every category
+- **Barriers**: Data lock-in, network effects, enterprise procurement inertia, integration depth
+- **Timeline**: 3-7 years. Agent-driven tool switching will erode moats of current SaaS incumbents.
+
+### Expertise / Consulting
+- **Stage**: Marketplace → Exchange (for standardized deliverables)
+- **Exchange readiness**: 🟡
+- **Market size**: $300B+ (global management consulting)
+- **What standardization is needed**: Deliverable classification (market sizing, competitive analysis, process audit), quality grading, outcome measurement
+- **AI capability that enables it**: AI commoditizes baseline knowledge work. Standard consulting deliverables (market sizing, benchmarking, process mapping) can be AI-generated. The insight premium collapses for non-differentiated analysis.
+- **Current state**: If "everyone has access to the same baseline of AI-provided expertise, then expert insights that were once special become commonplace." AI can produce a market sizing or competitive analysis that's 80% as good as a junior consultant's output, at 1% of the cost.
+- **Key players**: McKinsey, BCG, Bain (incumbents); emerging AI-native consulting tools; GLG, AlphaSights (expert networks already partially commoditized)
+- **Barriers**: Relationship-driven sales, implementation expertise, brand/trust premium, political dimensions of consulting
+- **Timeline**: 3-5 years for standardized deliverables (market sizing, benchmarking). Strategic advisory remains relationship-driven.
+
+---
+
+## 🟡 Speculative — Early Signals
+
+### Water Rights Trading
+- **Exchange readiness**: 🟡 (early)
+- **Market size**: ~$1T+ (global water infrastructure); water rights markets fragmented
+- **Current state**: Nasdaq Veles California Water Index (NQH2O) launched in 2020 — the first water futures contract. WestWater Research provides water rights brokerage. Australia's Murray-Darling Basin has the most developed water trading market. AI enables satellite-based water availability monitoring and demand forecasting.
+- **Barriers**: Water is a human right (political/ethical resistance to trading), local regulation, physical delivery constraints
+- **Timeline**: 5-10+ years. Water scarcity may force more market-based allocation.
+
+### Spectrum / Bandwidth Trading
+- **Exchange readiness**: 🟡 (early)
+- **Current state**: CBRS (Citizens Broadband Radio Service) created shared spectrum with dynamic allocation — essentially exchange-traded bandwidth. FCC spectrum auctions already function as primary market. Secondary spectrum trading emerging.
+- **Barriers**: Regulatory control, national security concerns, interference management
+- **Timeline**: 3-7 years for dynamic spectrum exchanges.
+
+### Manufacturing Capacity
+- **Exchange readiness**: 🟡
+- **Current state**: Xometry and Fictiv operate AI-powered manufacturing marketplaces that are approaching exchange dynamics — instant quoting, standardized specs, quality grading. Xometry's AI prices custom parts in seconds based on specs, materials, and current capacity.
+- **Barriers**: Physical complexity, quality variance, tooling requirements
+- **Timeline**: 3-5 years for standardized parts (CNC, 3D printing). Complex assemblies remain bespoke.
+
+### Translation / Localization
+- **Exchange readiness**: 🟡
+- **Current state**: AI translation (DeepL, Google Translate) has commoditized standard translation. Professional translation is bifurcating into AI+human-review (exchange-tradeable) and premium literary/marketing translation (artisan). Smartling, Phrase, and Lokalise automate the workflow.
+- **Barriers**: Nuance, cultural context, regulated content (legal, medical)
+- **Timeline**: 2-4 years for standard business translation. Already largely commoditized.
+
+---
+
 ## Summary Table
 
 | Category | Current Stage | Exchange Readiness | Key AI Unlock | Timeline |
@@ -205,10 +343,13 @@ Each category is assessed on: current market structure, what standardization is 
 | Financial securities | ✅ Exchange | ✅ Done | Algorithmic trading | Done |
 | Advertising | ✅ Exchange | ✅ Done | RTB + ML bidding | Done |
 | Commodity futures | ✅ Exchange | ✅ Done | Algorithmic trading | Done |
+| **AI inference tokens** | **Commodity emerging** | **🟢🟢 Active** | **Token standardization, futures** | **Now-2028** |
 | GPU/Cloud compute | Marketplace→Exchange | 🟢 Active | Spot pricing, workload matching | Now-2027 |
 | Freight/Logistics | Marketplace→Exchange | 🟢 Active | Algorithmic pricing, carrier grading | Now-2028 |
 | Insurance underwriting | Marketplace→Exchange | 🟢 Active | Autonomous underwriting | Now-2028 |
 | Carbon credits | Marketplace→Exchange | 🟢 Active | Satellite MRV, AI verification | 2025-2030 |
+| **B2B Procurement** | **Marketplace→Exchange** | **🟢 Active** | **Agent-driven sourcing** | **Now-2029** |
+| **IT Services** | **Marketplace→Exchange** | **🟢 Active** | **AI coding agents** | **Now-2029** |
 | Real estate | Marketplace | 🟡 Emerging | AVMs, tokenization | 2027-2033 |
 | Routine legal work | Marketplace | 🟡 Emerging | LLM task decomposition | 2027-2032 |
 | Education/Credentials | Bazaar→Marketplace | 🟡 Emerging | AI assessment, micro-credentials | 2028-2035 |
@@ -216,6 +357,16 @@ Each category is assessed on: current market structure, what standardization is 
 | Food delivery | Marketplace (logistics ≈ exchange) | 🟡 Emerging | Demand forecasting, dynamic pricing | Delivery: now; Production: 2027+ |
 | Attention/Influence | Marketplace | 🟡 Emerging | Audience verification, micro-sponsorship pricing | 2027-2032 |
 | Data | Marketplace | 🟡 Emerging | Quality grading, standardization | 2028-2035 |
+| **Pharma R&D** | **Bazaar→Marketplace** | **🟡 Emerging** | **AI molecule scoring, royalty trading** | **2026-2032** |
+| **Cyber risk** | **Marketplace** | **🟡 Emerging** | **AI risk scoring, standardized policies** | **2027-2030** |
+| **Energy storage** | **Marketplace** | **🟡 Emerging** | **AI dispatch, VPP aggregation** | **2027-2032** |
+| **Music/IP royalties** | **Marketplace** | **🟡 Emerging** | **AI valuation, fractional ownership** | **2026-2030** |
+| **SaaS/Productivity** | **Marketplace** | **🟡 Emerging** | **Agent tool-switching** | **2027-2032** |
+| **Consulting/Expertise** | **Marketplace** | **🟡 Emerging** | **AI baseline commoditization** | **2027-2030** |
+| **Manufacturing capacity** | **Marketplace** | **🟡 Emerging** | **AI instant quoting, spec matching** | **2027-2030** |
+| **Translation** | **Marketplace→Exchange** | **🟡 Emerging** | **AI translation + human review** | **Now-2028** |
+| **Water rights** | **Fragmented** | **🟡 Early** | **Satellite monitoring, futures** | **2030+** |
+| **Spectrum/Bandwidth** | **Regulated** | **🟡 Early** | **Dynamic allocation** | **2027-2032** |
 | Healthcare services | Regulated marketplace | 🔴 Far | AI diagnostics, billing | 2032+ |
 | Professional services | Bazaar/Marketplace | 🔴 Far | AI augmentation only | Partial only |
 | Luxury/Bespoke creative | Bazaar (intentional) | 🔴 Far | Creates commodity contrast | Won't exchangify |

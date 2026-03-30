@@ -77,10 +77,46 @@ Carbon credit exchangification depends on reliable measurement and verification.
 
 ---
 
+## On New Frictions (from Coasean Singularity research)
+
+### Do AI agents create new frictions that replace old ones?
+The NBER paper finds that while AI agents reduce search, communication, and contracting costs, they introduce *new* frictions: congestion (millions of agents hitting the same endpoints), price obfuscation (agents gaming each other), and algorithmic collusion. Critics sharpen this further: when the marginal cost of running an agent approaches zero, the scarce resource shifts to where the agent can run and what it can access. The firm that hosts the compute, owns the data, or controls the model becomes the effective landlord of the agent economy. Old frictions don't vanish — they mutate into **access rents**.
+
+**What would settle it**: Map the friction landscape of early agent-to-agent commerce environments. Are new frictions growing faster than old frictions are shrinking?
+
+### Is the asymptotic limit the key insight?
+The most likely outcome per the research: transaction costs drop dramatically but never quite reach zero due to persistent frictions (regulation, trust, coordination). This actually *strengthens* the bifurcation thesis — the artisan tier survives precisely because the last mile of cost reduction is the hardest. The interesting question is: how far does the asymptote go in each category? The categories where costs get closest to zero are the ones that exchangify most completely.
+
+**What would settle it**: Quantify the "residual friction floor" in already-exchangified categories (advertising, equities). How low did costs actually go?
+
+### The $3-5T agent commerce prediction
+McKinsey projects $3-5T in annual retail commerce orchestrated by AI agents by 2030. Gartner predicts 90% of B2B purchases handled by AI agents by 2028. If even half true, this creates the transaction volume needed for exchange dynamics in categories that currently lack liquidity.
+
+**What would settle it**: Track actual agent commerce volume quarterly starting 2026.
+
+---
+
+## On Newly Identified Categories
+
+### AI inference tokens: The fastest exchangification in history?
+Token spot markets already exceed $10B. A March 2026 paper proposes standardized token futures. If successful, this would be a category that went from *nonexistent* to *exchange-traded commodity* in under 5 years. But tokens aren't truly fungible — a Claude token isn't an GPT token isn't a Gemini token. Will model differentiation prevent true exchange dynamics, or will routing/aggregation layers (OpenRouter, Martian) create effective fungibility?
+
+### Can consulting survive AI commoditization of knowledge?
+If baseline expertise becomes free (AI can produce a market sizing, competitive analysis, or process map), what's left? Implementation, relationships, and political cover. But those are the things that *can't* be exchangified. Does consulting bifurcate into exchange-traded deliverables + artisan advisory? Or does the whole industry collapse because the commodity tier was subsidizing the premium tier?
+
+### Pharma R&D: Are molecules the new grain?
+Standardized molecular representations (SMILES, molecular graphs) + AI generative chemistry = molecules as tradeable units. Royalty Pharma already trades royalty streams as financial instruments. But drug development has a 90%+ failure rate — can you exchange-trade something with that much uncertainty? Or does the failure rate *itself* become the basis for financial instruments (like credit default swaps)?
+
+---
+
 ## Research Priorities
 
 1. **Empirical grading accuracy**: Find data on AI grading/quality assessment accuracy in non-financial categories (legal, coding, real estate, insurance). This is the linchpin.
 2. **Failed exchanges**: Study categories where exchange formation was attempted and failed. What were the conditions?
-3. **Agent commerce adoption**: Track real data on AI agent purchasing behavior and consumer trust.
+3. **Agent commerce adoption**: Track real data on AI agent purchasing behavior and consumer trust. McKinsey's $3-5T prediction is the benchmark.
 4. **Regulatory landscape**: Map the regulatory barriers to exchangification in key categories (healthcare, legal, labor, real estate).
 5. **Incumbent response**: How are current marketplace companies (Upwork, Airbnb, Zillow) thinking about exchange dynamics?
+6. **Token futures feasibility**: Track progress on the arxiv token futures proposal. Who will operate the first AI compute exchange?
+7. **New friction mapping**: Document the emerging frictions in agent-to-agent commerce (congestion, price obfuscation, access rents). Are they growing faster than old frictions shrink?
+8. **Residual friction floor**: Quantify how low transaction costs actually went in already-exchangified categories. This tells us the realistic limit for new categories.
+9. **B2B procurement agent adoption**: Track Gartner's 90% prediction. This is the highest-volume, highest-dollar exchangification currently in motion.
