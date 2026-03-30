@@ -20,7 +20,7 @@ Markets evolve through stages: **bazaar** (fragmented, local) → **marketplace*
 
 > **Convention:** TODOs must always be explicit, concrete action items — not vague aspirations. Each item should describe exactly what needs to be done, by whom or in which file, and what "done" looks like.
 
-- [ ] Merge thesis branch (`benrapport/exchangification-thesis`) into `main` so all content lives on the default branch
-- [ ] Add `.context/` directory with session notes (currently only on old Conductor branch)
+- [x] Merge thesis branch (`benrapport/exchangification-thesis`) into `main` so all content lives on the default branch
+- [x] Add `.context/` directory with session notes (currently only on old Conductor branch)
 - [ ] Review OPEN_QUESTIONS.md and convert the most promising questions into specific research tasks
 - [ ] Decide on a category from CATEGORY_MAP.md to deep-dive first and create a dedicated analysis doc
