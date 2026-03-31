@@ -20,19 +20,19 @@ logger = logging.getLogger(__name__)
 
 
 class AgentProvider:
-    """SDK for agent developers to register and serve capabilities.
+    """SDK for agent developers to register and serve work.
 
     Usage:
         provider = AgentProvider(
             exchange_url="http://localhost:8000",
-            agent_id="my-ocr-agent",
+            agent_id="my-agent",
             callback_port=9001,
         )
 
-        @provider.handle("ocr")
-        def handle_ocr(request):
+        @provider.handle()
+        def handle_request(request):
             # Do the work, return bid + output
-            return {"bid": 0.005, "work": "extracted text..."}
+            return {"bid": 0.005, "work": "result..."}
 
         provider.start()  # blocks, starts listening
     """
@@ -47,22 +47,19 @@ class AgentProvider:
         self.callback_port = callback_port
         self.callback_url = f"http://{callback_host}:{callback_port}"
 
-        self._handlers: dict[str, Callable] = {}
-        self._capabilities: list[str] = []
+        self._handler: Callable | None = None
         self._app = FastAPI(title=f"Agent: {agent_id}")
         self._setup_routes()
 
-    def handle(self, capability: str):
-        """Decorator to register a handler for a capability.
+    def handle(self):
+        """Decorator to register a handler for incoming requests.
 
-        The handler receives a dict with {request_id, capability, input,
-        max_price, min_quality} and must return a dict with
-        {bid, work}. All prices in USD.
+        The handler receives a dict with {request_id, input, max_price,
+        deadline_unix, ...} and must return a dict with {bid, work}.
+        All prices in USD. Return None to pass (decline to compete).
         """
         def decorator(fn: Callable):
-            self._handlers[capability] = fn
-            if capability not in self._capabilities:
-                self._capabilities.append(capability)
+            self._handler = fn
             return fn
         return decorator
 
@@ -70,20 +67,16 @@ class AgentProvider:
         @self._app.post("/request")
         async def receive_request(payload: BroadcastPayload):
             """Exchange broadcasts a request to us."""
-            logger.info(
-                f"Received request {payload.request_id} "
-                f"capability={payload.capability}"
-            )
-            handler = self._handlers.get(payload.capability)
-            if not handler:
-                logger.warning(f"No handler for capability={payload.capability}")
+            logger.info(f"Received request {payload.request_id}")
+            if not self._handler:
+                logger.warning("No handler registered")
                 return {"status": "no_handler"}
 
             # Run handler (may be slow — do it in a thread)
             loop = asyncio.get_event_loop()
             try:
                 result = await loop.run_in_executor(
-                    None, handler, payload.model_dump()
+                    None, self._handler, payload.model_dump()
                 )
             except Exception as e:
                 logger.error(f"Handler error: {e}")
@@ -124,11 +117,7 @@ class AgentProvider:
 
     def _register_with_exchange(self):
         """Register this agent with the exchange server."""
-        reg = AgentRegistration(
-            agent_id=self.agent_id,
-            capabilities=self._capabilities,
-            callback_url=self.callback_url,
-        )
+        reg = AgentRegistration(agent_id=self.agent_id)
         try:
             with httpx.Client(timeout=5.0) as client:
                 resp = client.post(
@@ -136,10 +125,7 @@ class AgentProvider:
                     json=reg.model_dump(),
                 )
                 resp.raise_for_status()
-                logger.info(
-                    f"Registered with exchange: {self.agent_id} "
-                    f"({self._capabilities})"
-                )
+                logger.info(f"Registered with exchange: {self.agent_id}")
         except Exception as e:
             logger.error(f"Failed to register: {e}")
             raise

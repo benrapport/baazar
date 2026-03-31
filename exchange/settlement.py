@@ -8,9 +8,9 @@ EXCHANGE_FEE_RATE = 0.20
 EXCHANGE_FEE_CAP = 0.01  # $0.01 cap
 
 
-def calc_exchange_fee(buyer_max: float, agent_price: float) -> float:
+def calc_exchange_fee(buyer_ask: float, agent_price: float) -> float:
     """20% of spread, capped at $0.01."""
-    spread = max(0, buyer_max - agent_price)
+    spread = max(0, buyer_ask - agent_price)
     return min(EXCHANGE_FEE_RATE * spread, EXCHANGE_FEE_CAP)
 
 
@@ -20,14 +20,13 @@ class Ledger:
         self._lock = threading.Lock()
 
     def record(self, request_id: str, buyer_id: str, agent_id: str,
-               capability: str, price: float, buyer_max: float,
+               price: float, buyer_ask: float,
                score: int | None, latency_ms: float) -> Transaction:
-        fee = calc_exchange_fee(buyer_max, price)
+        fee = calc_exchange_fee(buyer_ask, price)
         tx = Transaction(
             request_id=request_id,
             buyer_id=buyer_id,
             agent_id=agent_id,
-            capability=capability,
             price=price,
             exchange_fee=fee,
             buyer_charged=price + fee,

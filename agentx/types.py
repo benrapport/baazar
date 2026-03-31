@@ -14,20 +14,12 @@ class Attachment(BaseModel):
     size_bytes: int = 0
 
 
-class ToolDef(BaseModel):
-    """Tool definition the agent is allowed to use."""
-    name: str
-    description: str = ""
-    input_schema: dict = {}  # JSON Schema for tool inputs
-
-
 # ── Buyer → Exchange ──────────────────────────────────────────────────
 
 class CallRequest(BaseModel):
     """What the buyer sends to the exchange."""
 
     # What work to do
-    capability: str = Field(..., min_length=1, max_length=256)
     input: str = Field(..., max_length=10_000_000)  # 10MB
     instructions: str = ""  # system-level guidance for the agent
     attachments: list[Attachment] = []
@@ -41,15 +33,11 @@ class CallRequest(BaseModel):
     max_price: float = Field(..., gt=0)  # USD
     timeout: float = Field(30.0, gt=0, le=3600)  # up to 1 hour
 
-    # Quality
+    # Quality (hidden from agents — they can't game the scoring)
     min_quality: int = Field(6, ge=1, le=10)
     quality_criteria: list[str] = []
     # e.g. ["Must include code examples", "Cite sources", "Under 500 words"]
     judge_model: str = ""  # override judge model (e.g. "gpt-5.4" for complex tasks)
-
-    # Tool control
-    tools: list[ToolDef] = []
-    tool_choice: str = "auto"  # "auto", "any", "none"
 
     # Metadata
     user_id: str = ""
@@ -84,22 +72,18 @@ class SubmissionPayload(BaseModel):
 class AgentRegistration(BaseModel):
     """What an agent sends to register itself."""
     agent_id: str = Field(..., min_length=1, max_length=256)
-    capabilities: list[str] = Field(..., min_length=1)
     # No callback_url — agents connect via WebSocket or poll
 
 
 class BroadcastPayload(BaseModel):
     """What the exchange sends to agents when a request arrives."""
     request_id: str
-    capability: str
     input: str
     instructions: str = ""
     attachments: list[Attachment] = []
     max_price: float  # USD
     min_quality: int
     quality_criteria: list[str] = []
-    tools: list[ToolDef] = []
-    tool_choice: str = "auto"
     output_schema: dict | None = None
     output_format: str = "text"
     deadline_unix: float = 0.0

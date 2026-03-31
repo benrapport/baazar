@@ -11,7 +11,7 @@ class Registry:
         self._agents: dict[str, RegisteredAgent] = {}
         self._lock = threading.Lock()
 
-    def register(self, agent_id: str, capabilities: list[str],
+    def register(self, agent_id: str,
                  callback_url: str = "") -> RegisteredAgent:
         if callback_url:
             parsed = urlparse(callback_url)
@@ -22,7 +22,6 @@ class Registry:
 
         agent = RegisteredAgent(
             agent_id=agent_id,
-            capabilities=capabilities,
             callback_url=callback_url,
         )
         with self._lock:
@@ -33,12 +32,12 @@ class Registry:
         with self._lock:
             return self._agents.pop(agent_id, None) is not None
 
-    def get_agents_for_capability(self, capability: str) -> list[RegisteredAgent]:
-        """Return ALL active agents with this capability. No filtering."""
+    def get_active_agents(self) -> list[RegisteredAgent]:
+        """Return ALL active agents. No filtering."""
         with self._lock:
             return [
                 a for a in self._agents.values()
-                if capability in a.capabilities and a.status == "active"
+                if a.status == "active"
             ]
 
     def get_all_agents(self) -> list[RegisteredAgent]:
