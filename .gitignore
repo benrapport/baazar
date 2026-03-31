@@ -9,3 +9,4 @@ __pycache__/
 # Research & internal docs (kept locally, not shipped)
 research/
 SYSTEM_DESIGN.md
+sim_results/
