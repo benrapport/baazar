@@ -8,7 +8,7 @@ from exchange.types import Submission
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_JUDGE_MODEL = "gpt-5.4-nano"  # fastest + cheapest, buyer can upgrade
+DEFAULT_JUDGE_MODEL = "gpt-4o-mini"  # fast + cheap, buyer can override
 
 DEFAULT_CRITERIA = [
     "Correctness: Does it accurately complete the task?",
@@ -104,7 +104,7 @@ class Judge:
         try:
             resp = self._client.chat.completions.create(
                 model=self._model,
-                max_tokens=256,
+                max_completion_tokens=256,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": prompt},
@@ -134,7 +134,7 @@ class Judge:
         try:
             resp = self._client.chat.completions.create(
                 model=self._model,
-                max_tokens=1024,
+                max_completion_tokens=1024,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": "\n".join(parts)},

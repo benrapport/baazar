@@ -44,7 +44,7 @@ def make_cheap_agent():
 
         resp = client.chat.completions.create(
             model="gpt-4o-mini",
-            max_tokens=1024,
+            max_completion_tokens=1024,
             messages=[
                 {"role": "system", "content": (
                     "You are a fast, efficient AI agent competing in a marketplace. "
@@ -76,7 +76,7 @@ def make_mid_agent():
 
         resp = client.chat.completions.create(
             model="gpt-4.1-mini",
-            max_tokens=2048,
+            max_completion_tokens=2048,
             messages=[
                 {"role": "system", "content": (
                     "You are a capable AI agent competing in a marketplace. "
@@ -107,7 +107,7 @@ def make_premium_agent():
 
         resp = client.chat.completions.create(
             model="gpt-4.1",
-            max_tokens=4096,
+            max_completion_tokens=4096,
             messages=[
                 {"role": "system", "content": (
                     "You are a premium AI agent in a marketplace. "
