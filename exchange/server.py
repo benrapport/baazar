@@ -28,7 +28,8 @@ app = FastAPI(title="Bazaar Exchange", version="0.1.0")
 # Singletons — lazy init for OpenAI client (env may not be loaded at import)
 registry = Registry()
 ledger = Ledger()
-market_log_store = MarketLogStore()
+_market_log_path = os.environ.get("MARKET_LOG_PATH", "")
+market_log_store = MarketLogStore(output_path=_market_log_path or None)
 active_games: dict[str, GameState] = {}
 _games_lock = threading.Lock()
 _judge: Judge | None = None

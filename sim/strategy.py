@@ -93,6 +93,7 @@ def compute_bid(
     max_price: float,
     model: Model,
     budget_remaining_cents: float,
+    aggression: float = 0.5,
 ) -> float | None:
     """Compute bid price in USD. Returns None if agent should pass.
 
@@ -101,18 +102,10 @@ def compute_bid(
         max_price: Maximum price buyer is willing to pay (in USD)
         model: Model the agent would use
         budget_remaining_cents: Remaining budget in cents
+        aggression: 0.0 = bid at minimum, 1.0 = bid at maximum
 
     Returns:
         Bid in USD, or None to pass.
-
-    Rules:
-    - Estimated cost = estimated_tokens * model cost rate
-    - Minimum bid = estimated_cost * 1.2 (20% margin)
-    - Maximum bid = max_price * 0.8 (leave room for exchange fee)
-    - If min_bid > max_bid: return None (can't profitably compete)
-    - Cheap models (gpt-4o-mini) bid lower on easy tasks
-    - Expensive models only compete on hard+ tasks where they have quality advantage
-    - If budget_remaining_cents < estimated_cost: return None
     """
     # Get model costs (input, output per million tokens)
     input_cost_per_m, output_cost_per_m = MODEL_COSTS[model]
@@ -137,30 +130,17 @@ def compute_bid(
 
     difficulty_level = difficulty["level"]
 
-    # Cheap models bid aggressively on easy tasks
+    # Cheap models bid on easy/medium only
     if model in (Model.GPT_4O_MINI, Model.GPT_5_4_NANO):
-        if difficulty_level == "easy":
-            bid = min(max_bid, min_bid + (max_bid - min_bid) * 0.3)
-        elif difficulty_level == "medium":
-            bid = min(max_bid, min_bid + (max_bid - min_bid) * 0.1)
-        else:
-            # Don't bid on hard/extreme with cheap models
+        if difficulty_level in ("hard", "extreme"):
             return None
-    # Expensive models skip easy tasks, compete on medium+ with quality advantage
+    # Expensive models skip easy tasks
     elif model in (Model.GPT_4O, Model.GPT_4_1, Model.O4_MINI, Model.CLAUDE_SONNET):
         if difficulty_level == "easy":
             return None
-        elif difficulty_level == "medium":
-            bid = min(max_bid, min_bid + (max_bid - min_bid) * 0.5)
-        else:
-            bid = min(max_bid, min_bid + (max_bid - min_bid) * 0.4)
-    # Mid-range models bid balanced
-    else:
-        if difficulty_level == "easy":
-            bid = min(max_bid, min_bid + (max_bid - min_bid) * 0.2)
-        elif difficulty_level == "medium":
-            bid = min(max_bid, min_bid + (max_bid - min_bid) * 0.3)
-        else:
-            bid = min(max_bid, min_bid + (max_bid - min_bid) * 0.5)
+
+    # Bid = min_bid + aggression * (max_bid - min_bid)
+    bid = min_bid + aggression * (max_bid - min_bid)
+    bid = min(max_bid, max(min_bid, bid))
 
     return round(bid, 4)

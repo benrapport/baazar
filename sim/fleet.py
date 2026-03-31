@@ -21,6 +21,82 @@ class FleetMember:
     config: AgentConfig
     port: int
 
+
+# ── Fleet generation ──────────────────────────────────────────────────
+
+# Strategy archetypes: (name_suffix, bid_aggression, system_prompt_flavor)
+# bid_aggression: 0.0 = bid at minimum, 1.0 = bid at maximum
+STRATEGIES = [
+    ("agg", 0.8, "Be aggressive. Bid high, deliver fast. Speed wins."),
+    ("bal", 0.5, "Balance cost and quality. Bid moderately."),
+    ("con", 0.2, "Be conservative. Bid low, win on price."),
+    ("sniper", 0.1, "Undercut everyone. Bid as low as possible to win on price alone."),
+    ("premium", 0.9, "Premium quality. Charge what you're worth."),
+]
+
+# Model tiers for fleet composition
+CHEAP_MODELS = [Model.GPT_4O_MINI, Model.GPT_4_1_MINI]
+MID_MODELS = [Model.GPT_4O, Model.GPT_4_1]
+PREMIUM_MODELS = [Model.O4_MINI]
+
+MODEL_SHORT_NAMES = {
+    Model.GPT_4O_MINI: "4omini",
+    Model.GPT_4_1_MINI: "41mini",
+    Model.GPT_4O: "4o",
+    Model.GPT_4_1: "41",
+    Model.O4_MINI: "o4m",
+}
+
+MODEL_TURNS = {
+    Model.GPT_4O_MINI: 5,
+    Model.GPT_4_1_MINI: 8,
+    Model.GPT_4O: 8,
+    Model.GPT_4_1: 10,
+    Model.O4_MINI: 12,
+}
+
+
+def generate_fleet(size: int = 50, base_port: int = 9001) -> list[FleetMember]:
+    """Generate a diverse fleet of agents.
+
+    Cycles through models and strategies to create variety.
+    Cheap models get more agents (they compete on volume).
+    """
+    # Weight: cheap models get 3x slots, mid get 2x, premium get 1x
+    model_pool = (
+        CHEAP_MODELS * 3 +   # 6 cheap model slots
+        MID_MODELS * 2 +     # 4 mid model slots
+        PREMIUM_MODELS * 1   # 1 premium model slot
+    )  # 11 slots per cycle
+
+    members = []
+    for i in range(size):
+        model = model_pool[i % len(model_pool)]
+        strategy_name, aggression, prompt_flavor = STRATEGIES[i % len(STRATEGIES)]
+        model_name = MODEL_SHORT_NAMES[model]
+        max_turns = MODEL_TURNS[model]
+
+        agent_id = f"{model_name}-{strategy_name}-{i:02d}"
+        system_prompt = (
+            f"You are agent {agent_id}. {prompt_flavor} "
+            "Be concise and efficient in your responses."
+        )
+
+        members.append(FleetMember(
+            agent_id=agent_id,
+            config=AgentConfig(
+                model=model,
+                system_prompt=system_prompt,
+                max_turns=max_turns,
+                bid_aggression=aggression,
+            ),
+            port=base_port + i,
+        ))
+
+    return members
+
+
+# Default fleet: 5 agents (backward compatible)
 DEFAULT_FLEET: list[FleetMember] = [
     FleetMember("nano-agent", AgentConfig(model=Model.GPT_4O_MINI, system_prompt="You are a fast, cheap agent. Be concise and efficient.", max_turns=5), port=9001),
     FleetMember("mini-agent", AgentConfig(model=Model.GPT_4_1_MINI, system_prompt="You are a balanced agent. Good quality at reasonable cost.", max_turns=8), port=9002),
@@ -28,6 +104,7 @@ DEFAULT_FLEET: list[FleetMember] = [
     FleetMember("fast-agent", AgentConfig(model=Model.GPT_4O, system_prompt="You are a fast, capable agent. Optimize for speed and accuracy.", max_turns=8), port=9004),
     FleetMember("reasoning-agent", AgentConfig(model=Model.O4_MINI, system_prompt="You are a reasoning-focused agent. Think step by step.", max_turns=12), port=9005),
 ]
+
 
 class Fleet:
     """Manages a fleet of agent servers."""
@@ -39,26 +116,14 @@ class Fleet:
         self._agents: dict[str, ClaudeCodeAgent] = {}  # agent_id -> agent instance
 
     def launch(self):
-        """Start all agents in background threads.
-
-        For each FleetMember:
-        1. Create ClaudeCodeAgent with its config
-        2. Create AgentProvider wrapping it
-        3. The handler: assess difficulty -> compute bid -> if viable, solve -> return {bid, work}
-        4. Start provider in daemon thread
-
-        The handler function must:
-        - Call assess_difficulty(task_input) for quick difficulty estimate
-        - Call compute_bid(difficulty, max_price, model, budget) to get bid
-        - If bid is None: return None (pass)
-        - If bid is viable: call agent.solve(task_input, deadline) to get work
-        - Return {"bid": bid, "work": work}
-        """
+        """Start all agents in background threads."""
         for member in self.members:
             agent = ClaudeCodeAgent(member.config)
             self._agents[member.agent_id] = agent
 
             def make_handler(agent_id: str, agent: ClaudeCodeAgent, config: AgentConfig):
+                aggression = getattr(config, 'bid_aggression', 0.5)
+
                 def handler(request: dict) -> dict | None:
                     """Handler for AgentProvider. Receives payload.model_dump() dict."""
                     try:
@@ -69,17 +134,17 @@ class Fleet:
                         # Assess task difficulty
                         difficulty_info = assess_difficulty(task_input)
 
-                        # Compute bid
+                        # Compute bid (with aggression override)
                         bid = compute_bid(
                             difficulty=difficulty_info,
                             max_price=max_price,
                             model=config.model,
                             budget_remaining_cents=agent.budget_remaining_cents,
+                            aggression=aggression,
                         )
 
                         # If bid is None, we pass on this task
                         if bid is None:
-                            logger.info(f"{agent_id} passes on task")
                             return None
 
                         # Solve the task with deadline
