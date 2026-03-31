@@ -2,8 +2,8 @@
 
 Broadcast full request to ALL agents. Agents submit work + price.
 Each submission triggers an immediate, concurrent judge evaluation.
-First qualifying submission (by timestamp) wins.
-Feedback sent back once per submission if it doesn't qualify.
+Winner is the earliest-timestamped qualifying submission.
+We never declare a winner while earlier submissions are still being judged.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ MAX_REVISIONS = 3
 HARD_TIMEOUT = 60.0
 MIN_TIMEOUT = 1.0
 MAX_TIMEOUT = 300.0
-CHECK_INTERVAL = 0.05  # 50ms — how often we check for new submissions
+CHECK_INTERVAL = 0.05  # 50ms
 
 
 async def run_game(
@@ -41,7 +41,7 @@ async def run_game(
     timeout: float = HARD_TIMEOUT,
     state: GameState | None = None,
 ) -> ExchangeResult:
-    """Run a full game for one buyer request. Returns the winning result."""
+    """Run a full game for one buyer request."""
 
     if max_price <= 0:
         raise ValueError("max_price must be positive")
@@ -78,7 +78,6 @@ async def run_game(
     logger.info(f"[{request_id}] Broadcasting to {len(agents)} agents")
     await _broadcast(payload, agents, deadline)
 
-    # Wait for a winner via concurrent judge evaluations
     result = await _wait_for_winner(state, judge, deadline)
 
     if result is None:
@@ -87,7 +86,6 @@ async def run_game(
             f"({len(state.submissions)} submissions received)"
         )
 
-    # Record transaction
     winner_sub = state.submissions[result.agent_id]
     tx = ledger.record(
         request_id=request_id,
@@ -140,101 +138,100 @@ async def _send_to_agent(client: httpx.AsyncClient,
         logger.warning(f"Broadcast to {agent.agent_id} failed: {e}")
 
 
-# ── Concurrent Judge Loop ─────────────────────────────────────────────
+# ── Concurrent Judge ──────────────────────────────────────────────────
 
 async def _wait_for_winner(state: GameState, judge: Judge,
                            deadline: float) -> ExchangeResult | None:
-    """Check for new submissions every 50ms, spawn a judge task for each.
+    """Spawn a judge task per submission. Pick winner by arrival time.
 
-    Multiple judges run concurrently. The first qualifying score
-    (by submission timestamp) wins. Feedback is sent back once per
-    submission that doesn't qualify.
+    Rules:
+    - Each submission gets its own concurrent judge task
+    - Judges only SCORE — they don't pick winners
+    - The main loop (every 50ms) checks scored submissions
+    - Winner = earliest-timestamped submission that qualifies
+    - We NEVER declare a winner while an earlier submission is still being judged
     """
-    scored_versions: dict[str, int] = {}   # agent_id -> last scored revision
+    scored_versions: dict[str, int] = {}  # agent_id -> revision we sent to judge
+    judging: set[str] = set()             # agent_ids currently being judged
     judge_tasks: list[asyncio.Task] = []
-    winner_event = asyncio.Event()
-    winner_result: list[ExchangeResult] = []  # mutable container for result
 
-    async def _judge_one(agent_id: str, sub: Submission):
-        """Score a single submission. If it qualifies, signal winner."""
-        if state.done:
-            return
-
-        logger.info(f"[{state.request_id}] Judging {agent_id} (rev {sub.revision})")
-        # Run judge in thread pool (it's synchronous / calls OpenAI)
-        loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(
-            None, judge.score_submission, state.input, sub
-        )
-
-        score = result["score"]
-        feedback = result["feedback"]
-
-        with state.lock:
-            if state.done:
-                return  # another judge already found a winner
-            if agent_id not in state.submissions:
-                return
-            state.submissions[agent_id].score = score
-            state.submissions[agent_id].feedback = feedback
-
-        logger.info(f"[{state.request_id}] {agent_id}: {score}/10")
-
-        # Check if this submission qualifies
-        if score >= state.min_quality and sub.bid <= state.max_price:
-            # Try to claim the win — earliest qualifying timestamp wins
+    async def _score_one(agent_id: str, sub: Submission):
+        """Score a submission. Only writes score — does NOT pick winner."""
+        try:
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                None, judge.score_submission, state.input, sub
+            )
             with state.lock:
-                if state.done:
-                    return
-                # Check if a better (earlier) qualifier already exists
-                qualifiers = [
-                    (aid, s) for aid, s in state.submissions.items()
-                    if s.score is not None
-                    and s.score >= state.min_quality
-                    and s.bid <= state.max_price
-                ]
-                if not qualifiers:
-                    return
-                best_aid, best_sub = min(
-                    qualifiers, key=lambda x: (x[1].bid, x[1].timestamp)
-                )
-                state.winner = best_aid
-                state.done = True
+                if agent_id in state.submissions:
+                    state.submissions[agent_id].score = result["score"]
+                    state.submissions[agent_id].feedback = result["feedback"]
+            logger.info(
+                f"[{state.request_id}] {agent_id}: {result['score']}/10"
+            )
+        except Exception as e:
+            logger.error(f"[{state.request_id}] Judge error for {agent_id}: {e}")
+        finally:
+            judging.discard(agent_id)
 
-            winner_result.append(ExchangeResult(
-                output=best_sub.work,
-                agent_id=best_aid,
-                price=best_sub.bid,
-                latency_ms=(time.time() - state.start_time) * 1000,
-                score=best_sub.score,
-            ))
-            winner_event.set()
-
-    # Main check loop — 50ms intervals
     while time.time() < deadline and not state.done:
         remaining = deadline - time.time()
         if remaining <= 0:
             break
         await asyncio.sleep(min(CHECK_INTERVAL, remaining))
 
-        # Find new/revised submissions to judge
         with state.lock:
-            for agent_id, sub in state.submissions.items():
-                prev_rev = scored_versions.get(agent_id, -1)
-                if sub.revision > prev_rev and sub.score is None:
-                    scored_versions[agent_id] = sub.revision
-                    task = asyncio.create_task(_judge_one(agent_id, sub))
-                    judge_tasks.append(task)
+            subs_snapshot = dict(state.submissions)
 
-    # Wait briefly for any in-flight judges to finish
+        # Spawn judges for new/revised submissions
+        for agent_id, sub in subs_snapshot.items():
+            prev_rev = scored_versions.get(agent_id, -1)
+            if sub.revision > prev_rev and agent_id not in judging:
+                scored_versions[agent_id] = sub.revision
+                judging.add(agent_id)
+                task = asyncio.create_task(_score_one(agent_id, sub))
+                judge_tasks.append(task)
+
+        # Check for winner among scored submissions
+        # Only consider if NO earlier-timestamped submission is still being judged
+        with state.lock:
+            qualifiers = [
+                (aid, sub) for aid, sub in state.submissions.items()
+                if sub.score is not None
+                and sub.score >= state.min_quality
+                and sub.bid <= state.max_price
+            ]
+
+        if qualifiers:
+            # Sort by bid (lowest), then timestamp (earliest)
+            qualifiers.sort(key=lambda x: (x[1].bid, x[1].timestamp))
+            best_aid, best_sub = qualifiers[0]
+
+            # Is there an unscored submission that arrived EARLIER than our best?
+            # If so, wait — it might qualify and beat our current best.
+            earlier_unscored = any(
+                sub.score is None and sub.timestamp < best_sub.timestamp
+                for sub in subs_snapshot.values()
+            )
+
+            if not earlier_unscored:
+                with state.lock:
+                    if not state.done:
+                        state.winner = best_aid
+                        state.done = True
+                return ExchangeResult(
+                    output=best_sub.work,
+                    agent_id=best_aid,
+                    price=best_sub.bid,
+                    latency_ms=(time.time() - state.start_time) * 1000,
+                    score=best_sub.score,
+                )
+
+    # Deadline passed — wait briefly for in-flight judges
     if judge_tasks:
         await asyncio.wait(judge_tasks, timeout=5.0)
 
-    # If we got a winner, return it
-    if winner_result:
-        return winner_result[0]
-
-    # Timeout fallback — return best scored submission
+    # Return best scored submission as fallback
     with state.lock:
         subs = dict(state.submissions)
 
@@ -255,7 +252,7 @@ async def _wait_for_winner(state: GameState, judge: Judge,
     return None
 
 
-# ── Winner Selection (used by external callers) ──────────────────────
+# ── Helpers (used by tests + external callers) ────────────────────────
 
 def _get_qualifiers(state: GameState) -> list[str]:
     """Return agent IDs whose submissions meet quality threshold."""
@@ -291,8 +288,6 @@ def _select_winner(state: GameState,
         score=sub.score,
     )
 
-
-# ── Receive Submission ────────────────────────────────────────────────
 
 def receive_submission(state: GameState, agent_id: str,
                        bid: float, work: str) -> bool:
