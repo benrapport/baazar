@@ -161,12 +161,12 @@ TASK_QUEUE = [
 
 # ── economic state ────────────────────────────────────────────────────
 STARTING_BUDGET_CENTS = 300.0  # $3.00
-MIN_BID_CENTS = 0.10
+MIN_BID_CENTS = 0.00001
 ELIMINATION_THRESHOLD = 0.10   # eliminated below 0.10¢
 
 budgets = {n: STARTING_BUDGET_CENTS for n in MODEL_NAMES}  # in cents
 token_spend = {n: 0.0 for n in MODEL_NAMES}  # cumulative token cost in cents
-bid_spend = {n: 0.0 for n in MODEL_NAMES}    # cumulative bid cost in cents
+revenue = {n: 0.0 for n in MODEL_NAMES}       # cumulative revenue from winning in cents
 stats = {n: {"wins": 0, "losses": 0, "passes": 0,
              "tokens_used": {"input": 0, "output": 0}}
          for n in MODEL_NAMES}
@@ -348,11 +348,17 @@ Before bidding, consider:
 5. UPCOMING TASKS: Are there higher-value tasks coming that are a better fit for you?
 6. WIN PROBABILITY: Given the competition, can you realistically win this one?
 
+=== ECONOMICS ===
+- You SPEND tokens from your budget for every API call (~{est_token_cost:.3f}¢ each).
+- If you WIN: you RECEIVE your bid amount as payment (budget goes UP).
+- Net profit = bid received − tokens spent. You want to MAXIMIZE profit.
+- If you LOSE: you spent tokens but earn nothing. Budget goes DOWN.
+- PASS costs nothing (no API call, no token cost).
+
 === RULES ===
 - Bid LESS than {buyer_price:.2f}¢. Bids at or above are rejected.
 - Lowest qualifying bid wins (score ≥ {min_score}/10).
-- Your bid + token cost comes from your {budget:.2f}¢ budget.
-- If buyer_price is close to your token cost, PASS unless you're confident you'll win.
+- If buyer_price is barely above your token cost, the profit margin is thin — PASS unless confident.
 - PASS to save budget for higher-value tasks where you have an edge.
 
 Respond with ONLY valid JSON:
@@ -524,7 +530,8 @@ def bidder_work(name: str, state: RoundState, round_num: int):
         work = work_raw if isinstance(work_raw, str) else json.dumps(work_raw, indent=2)
 
         if compete:
-            bid_amt = max(MIN_BID_CENTS, min(bid_amt, state.buyer_price - 0.01, budgets[name]))
+            # Bid must be under buyer price. No budget clamp — bid is revenue, not cost.
+            bid_amt = max(MIN_BID_CENTS, min(bid_amt, state.buyer_price - 0.01))
 
         state.submit(name, bid_amt, work, compete)
         with state.lock:
@@ -798,9 +805,12 @@ def display_transaction(state: RoundState):
     buyer_surplus = state.buyer_price - buyer_pays
     winner_token_cost = state.token_costs.get(winner, 0)
 
+    # Seller RECEIVES their bid amount as payment (budget goes UP)
+    # Tokens were already deducted during API calls (budget went DOWN)
+    # Net profit = bid received - tokens spent
     with budget_lock:
-        budgets[winner] -= bid_amt
-        bid_spend[winner] += bid_amt
+        budgets[winner] += bid_amt
+        revenue[winner] += bid_amt
         stats[winner]["wins"] += 1
         exchange_revenue += fee
         for n in state.models:
@@ -814,16 +824,18 @@ def display_transaction(state: RoundState):
     print(f"  │ Task:    {state.task[:55]}")
     print(f"  │ Buyer:   {state.buyer_price:.2f}¢ max, requires {state.min_score}/10")
     print(f"  │")
+    net_profit = bid_amt - winner_token_cost
+
     print(f"  │ Winner:  {winner}")
-    print(f"  │   Bid:           {bid_amt:>8.2f}¢")
+    print(f"  │   Offer:         {bid_amt:>8.2f}¢  (seller charges)")
     print(f"  │   Score:         {score}/10")
-    print(f"  │   Token cost:    {winner_token_cost:>8.3f}¢  (real API cost this round)")
-    print(f"  │   Total cost:    {bid_amt + winner_token_cost:>8.3f}¢  (bid + tokens)")
+    print(f"  │   Token cost:    {winner_token_cost:>8.3f}¢  (internal API cost)")
+    print(f"  │   Net profit:    {net_profit:>8.3f}¢  (offer − tokens)")
     print(f"  │")
-    print(f"  │ Spread:          {spread:>8.2f}¢")
-    print(f"  │ Exchange fee:    {fee:>8.2f}¢  (min of 20% spread, 1.00¢)")
-    print(f"  │ Buyer pays:      {buyer_pays:>8.2f}¢")
-    print(f"  │ Buyer surplus:   {buyer_surplus:>8.2f}¢")
+    print(f"  │ Spread:          {spread:>8.2f}¢  (buyer max − offer)")
+    print(f"  │ Exchange fee:    {fee:>8.2f}¢  (20% of spread, capped 1¢)")
+    print(f"  │ Buyer pays:      {buyer_pays:>8.2f}¢  (offer + fee)")
+    print(f"  │ Buyer surplus:   {buyer_surplus:>8.2f}¢  (max − buyer pays)")
     print(f"  └{'─' * 62}")
 
     # Winner output
@@ -855,7 +867,7 @@ def display_scoreboard():
     print(f"  {'SCOREBOARD':^90}")
     print(f"  {'═' * 90}")
     print(f"  {'Model':<14s} {'W':>3s} {'L':>3s} {'P':>3s} "
-          f"{'Bid$':>8s} {'Token$':>8s} {'Budget':>10s} {'In-Tok':>8s} {'Out-Tok':>8s}")
+          f"{'Revenue':>9s} {'TokenCost':>10s} {'Net P&L':>9s} {'Budget':>10s}")
     print(f"  {'─' * 90}")
 
     with budget_lock:
@@ -863,18 +875,20 @@ def display_scoreboard():
             s = stats[n]
             b = budgets[n]
             ts = token_spend[n]
-            bs = bid_spend[n]
+            rev = revenue[n]
+            net = rev - ts
             elim = " \033[91m(OUT)\033[0m" if b < ELIMINATION_THRESHOLD else ""
-            it = s["tokens_used"]["input"]
-            ot = s["tokens_used"]["output"]
+            net_color = "\033[92m" if net >= 0 else "\033[91m"
             print(f"  {n:<14s} {s['wins']:>3d} {s['losses']:>3d} {s['passes']:>3d} "
-                  f"{bs:>7.2f}¢ {ts:>7.2f}¢ {b:>8.2f}¢ {it:>7,d} {ot:>7,d}{elim}")
+                  f"{rev:>8.2f}¢ {ts:>9.2f}¢ {net_color}{net:>8.2f}¢\033[0m {b:>8.2f}¢{elim}")
 
     print(f"  {'─' * 90}")
     total_token = sum(token_spend.values())
-    total_bid = sum(bid_spend.values())
+    total_rev = sum(revenue.values())
+    total_net = total_rev - total_token
     print(f"  Exchange revenue: {exchange_revenue:.2f}¢  |  "
-          f"Total token cost: {total_token:.2f}¢  |  Total bids: {total_bid:.2f}¢")
+          f"Total token cost: {total_token:.2f}¢  |  Total revenue: {total_rev:.2f}¢  |  "
+          f"Net: {total_net:.2f}¢")
     print(f"  {'═' * 90}\n")
 
 
@@ -985,12 +999,19 @@ def main():
 
     with budget_lock:
         best = max(MODEL_NAMES, key=lambda n: stats[n]["wins"])
-        most_efficient = max(MODEL_NAMES,
-                             key=lambda n: stats[n]["wins"] / max(token_spend[n] + bid_spend[n], 0.01))
-        print(f"  Most wins:     {best} — {stats[best]['wins']} wins")
-        print(f"  Most efficient: {most_efficient} — "
-              f"{stats[most_efficient]['wins']} wins / "
-              f"{token_spend[most_efficient] + bid_spend[most_efficient]:.2f}¢ spent")
+        most_profitable = max(MODEL_NAMES,
+                              key=lambda n: revenue[n] - token_spend[n])
+        best_margin = max(MODEL_NAMES,
+                          key=lambda n: (revenue[n] - token_spend[n]) / max(revenue[n], 0.01))
+        print(f"  Most wins:      {best} — {stats[best]['wins']} wins")
+        mp_net = revenue[most_profitable] - token_spend[most_profitable]
+        print(f"  Most profitable: {most_profitable} — "
+              f"{mp_net:.2f}¢ net profit ({revenue[most_profitable]:.2f}¢ rev − {token_spend[most_profitable]:.2f}¢ cost)")
+        bm_rev = revenue[best_margin]
+        bm_cost = token_spend[best_margin]
+        bm_margin = (bm_rev - bm_cost) / max(bm_rev, 0.01) * 100
+        print(f"  Best margin:    {best_margin} — "
+              f"{bm_margin:.0f}% margin ({bm_rev:.2f}¢ rev − {bm_cost:.2f}¢ cost)")
 
     # ── Save transcript ───────────────────────────────────────────────
     transcript_path = Path(__file__).resolve().parent / "game_transcript.txt"
@@ -1017,11 +1038,12 @@ def main():
         f.write(f"\n{'=' * 70}\n")
         f.write("FINAL SCOREBOARD\n")
         f.write(f"{'Model':<14s} {'W':>3s} {'L':>3s} {'P':>3s} "
-                f"{'Bid$':>8s} {'Token$':>8s} {'Budget':>10s}\n")
+                f"{'Revenue':>9s} {'TokenCost':>10s} {'Net P&L':>9s} {'Budget':>10s}\n")
         for n in MODEL_NAMES:
             s = stats[n]
+            net = revenue[n] - token_spend[n]
             f.write(f"{n:<14s} {s['wins']:>3d} {s['losses']:>3d} {s['passes']:>3d} "
-                    f"{bid_spend[n]:>7.2f}¢ {token_spend[n]:>7.2f}¢ {budgets[n]:>8.2f}¢\n")
+                    f"{revenue[n]:>8.2f}¢ {token_spend[n]:>9.2f}¢ {net:>8.2f}¢ {budgets[n]:>8.2f}¢\n")
         f.write(f"\nExchange revenue: {exchange_revenue:.2f}¢\n")
 
     print(f"\n  Transcript saved to {transcript_path}")

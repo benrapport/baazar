@@ -54,7 +54,7 @@ def reset_state():
     for n in bid.MODEL_NAMES:
         bid.budgets[n] = bid.STARTING_BUDGET_CENTS
         bid.token_spend[n] = 0.0
-        bid.bid_spend[n] = 0.0
+        bid.revenue[n] = 0.0
         bid.stats[n] = {"wins": 0, "losses": 0, "passes": 0,
                          "tokens_used": {"input": 0, "output": 0}}
     bid.exchange_revenue = 0.0
@@ -180,7 +180,7 @@ def run_unit_tests():
         reset_state()
         assert all(bid.budgets[n] == bid.STARTING_BUDGET_CENTS for n in bid.MODEL_NAMES)
         assert all(bid.token_spend[n] == 0.0 for n in bid.MODEL_NAMES)
-        assert all(bid.bid_spend[n] == 0.0 for n in bid.MODEL_NAMES)
+        assert all(bid.revenue[n] == 0.0 for n in bid.MODEL_NAMES)
         assert bid.STARTING_BUDGET_CENTS == 300.0
     check("budgets at 300¢, token/bid spend at 0", test_economics_init)
 
