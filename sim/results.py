@@ -194,7 +194,8 @@ def generate_summary(results: list[TaskResult]) -> dict:
 
     # Economics
     total_volume = sum(r.winning_bid for r in results if r.winning_bid is not None)
-    avg_price = total_volume / len([r for r in results if r.winning_bid is not None]) if results else 0.0
+    priced_results = [r for r in results if r.winning_bid is not None]
+    avg_price = total_volume / len(priced_results) if priced_results else 0.0
 
     # Timing and latencies
     latencies = [r.latency_ms for r in results if r.latency_ms > 0]

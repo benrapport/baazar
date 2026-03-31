@@ -11,6 +11,7 @@ import argparse
 import asyncio
 import json
 import logging
+import os
 import subprocess
 import sys
 import time
@@ -31,11 +32,13 @@ class SimulationRunner:
         max_concurrent: int = 50,
         exchange_url: str = "http://localhost:8000",
         output_dir: str = "sim_results",
+        fleet_members: list | None = None,
     ):
         self.num_tasks = num_tasks
         self.max_concurrent = max_concurrent
         self.exchange_url = exchange_url
         self.output_dir = output_dir
+        self._fleet_members = fleet_members
         self._exchange_process = None
         self._fleet = None
 
@@ -52,6 +55,13 @@ class SimulationRunner:
 
         Returns summary dict.
         """
+        # Set up market log path so exchange writes JSONL directly
+        output_path = Path(self.output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+        self._market_log_ts = int(time.time())
+        market_log_path = output_path / f"markets_{self._market_log_ts}.jsonl"
+        env = {**os.environ, "MARKET_LOG_PATH": str(market_log_path)}
+
         try:
             # 1. Start exchange server
             logger.info("Starting exchange server...")
@@ -59,6 +69,7 @@ class SimulationRunner:
                 [sys.executable, "demo/run_exchange.py"],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
+                env=env,
             )
             await asyncio.sleep(2)  # Give it time to bind
 
@@ -67,8 +78,11 @@ class SimulationRunner:
             await self._wait_for_exchange()
 
             # 3. Launch agent fleet
-            logger.info("Launching agent fleet...")
-            self._fleet = Fleet(exchange_url=self.exchange_url)
+            self._fleet = Fleet(
+                members=self._fleet_members,
+                exchange_url=self.exchange_url,
+            )
+            logger.info(f"Launching agent fleet ({len(self._fleet.members)} agents)...")
             self._fleet.launch()
             await asyncio.sleep(1)  # Give agents time to start
 
@@ -88,13 +102,21 @@ class SimulationRunner:
             results_file = writer.close()
             logger.info(f"Results written to {results_file}")
 
-            # 6. Fetch market logs from exchange
-            logger.info("Fetching market logs from exchange...")
-            await self._fetch_market_logs()
+            # 6. Check market logs (written by exchange server directly)
+            if market_log_path.exists():
+                count = sum(1 for _ in open(market_log_path))
+                logger.info(f"Market logs: {market_log_path} ({count} markets)")
+            else:
+                logger.warning("No market log file found — exchange may not have written any")
 
-            # 7. Generate and save summary
+            # 7. Generate and save summary (include agent costs for PnL)
             logger.info("Generating summary...")
+            agent_costs = {}
+            if self._fleet:
+                for stat in self._fleet.get_agent_stats():
+                    agent_costs[stat["agent_id"]] = stat["total_cost_usd"]
             summary = generate_summary(results)
+            summary["agent_costs_usd"] = agent_costs
             summary_file = save_summary(summary, output_dir=self.output_dir)
             logger.info(f"Summary written to {summary_file}")
 
@@ -323,17 +345,25 @@ def main():
     parser = argparse.ArgumentParser(description="Run exchange simulation")
     parser.add_argument("--tasks", type=int, default=1000, help="Number of tasks")
     parser.add_argument("--concurrent", type=int, default=50, help="Max concurrent requests")
+    parser.add_argument("--fleet-size", type=int, default=0,
+                        help="Number of agents (0 = default 5-agent fleet)")
     parser.add_argument("--exchange-url", type=str, default="http://localhost:8000")
     parser.add_argument("--output", type=str, default="sim_results")
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
+    fleet_members = None
+    if args.fleet_size > 0:
+        from sim.fleet import generate_fleet
+        fleet_members = generate_fleet(size=args.fleet_size)
+
     runner = SimulationRunner(
         num_tasks=args.tasks,
         max_concurrent=args.concurrent,
         exchange_url=args.exchange_url,
         output_dir=args.output,
+        fleet_members=fleet_members,
     )
     summary = asyncio.run(runner.run())
 
