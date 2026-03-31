@@ -8,7 +8,7 @@ from exchange.types import Submission
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_JUDGE_MODEL = "gpt-4.1"
+DEFAULT_JUDGE_MODEL = "gpt-5.4-mini"  # smart + fast + cheap
 
 DEFAULT_CRITERIA = [
     "Correctness: Does it accurately complete the task?",
