@@ -70,8 +70,13 @@ class AgentProvider:
         @self._app.post("/request")
         async def receive_request(payload: BroadcastPayload):
             """Exchange broadcasts a request to us."""
+            logger.info(
+                f"Received request {payload.request_id} "
+                f"capability={payload.capability}"
+            )
             handler = self._handlers.get(payload.capability)
             if not handler:
+                logger.warning(f"No handler for capability={payload.capability}")
                 return {"status": "no_handler"}
 
             # Run handler (may be slow — do it in a thread)
@@ -150,11 +155,19 @@ class AgentProvider:
             )
             server_thread.start()
 
+            # Wait for server to actually be listening
+            import socket
             import time
-            time.sleep(0.5)
+            for _ in range(20):
+                try:
+                    with socket.create_connection(
+                        (self.callback_host, self.callback_port), timeout=0.5
+                    ):
+                        break
+                except (ConnectionRefusedError, OSError):
+                    time.sleep(0.1)
 
             self._register_with_exchange()
-
             server_thread.join()
         else:
             self._run_server()

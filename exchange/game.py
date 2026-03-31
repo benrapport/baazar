@@ -72,10 +72,12 @@ async def run_game(
         input=input_text,
         max_price=max_price,
         min_quality=min_quality,
+        deadline_unix=deadline,
     )
 
+    deadline = state.start_time + timeout
     logger.info(f"[{request_id}] Broadcasting to {len(agents)} agents")
-    await _broadcast(payload, agents)
+    await _broadcast(payload, agents, deadline)
 
     # Poll for submissions until we have a winner or timeout
     result = await _judge_loop(state, judge, timeout)
@@ -108,13 +110,21 @@ async def run_game(
 
 
 async def _broadcast(payload: BroadcastPayload,
-                     agents: list[RegisteredAgent]) -> None:
+                     agents: list[RegisteredAgent],
+                     deadline: float) -> None:
     """Send full request to ALL agents. Fire-and-forget."""
-    async with httpx.AsyncClient(timeout=5.0) as client:
-        tasks = [
-            _send_to_agent(client, agent, payload)
-            for agent in agents
-        ]
+    remaining = deadline - time.time()
+    if remaining <= 0:
+        return
+    timeout_secs = min(5.0, remaining)
+    semaphore = asyncio.Semaphore(50)  # limit concurrent broadcasts
+
+    async def send_limited(agent):
+        async with semaphore:
+            await _send_to_agent(client, agent, payload)
+
+    async with httpx.AsyncClient(timeout=timeout_secs) as client:
+        tasks = [send_limited(agent) for agent in agents]
         await asyncio.gather(*tasks, return_exceptions=True)
 
 
@@ -137,7 +147,10 @@ async def _judge_loop(state: GameState, judge: Judge,
     scored_versions: dict[str, int] = {}  # agent_id -> last scored revision
 
     while time.time() < deadline and not state.done:
-        await asyncio.sleep(JUDGE_POLL_INTERVAL)
+        remaining = deadline - time.time()
+        if remaining <= 0:
+            break
+        await asyncio.sleep(min(JUDGE_POLL_INTERVAL, remaining))
 
         # Snapshot submissions (thread-safe read)
         with state.lock:

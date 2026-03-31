@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 import threading
+from urllib.parse import urlparse
 from exchange.types import RegisteredAgent
 
 
@@ -12,6 +13,12 @@ class Registry:
 
     def register(self, agent_id: str, capabilities: list[str],
                  callback_url: str) -> RegisteredAgent:
+        parsed = urlparse(callback_url)
+        if parsed.scheme not in ("http", "https"):
+            raise ValueError(f"Invalid callback_url scheme: {parsed.scheme}")
+        if not parsed.netloc:
+            raise ValueError(f"Invalid callback_url: missing host")
+
         agent = RegisteredAgent(
             agent_id=agent_id,
             capabilities=capabilities,

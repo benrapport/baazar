@@ -694,16 +694,15 @@ class TestExchangeClient:
         with pytest.raises(ConnectionError, match="Cannot connect"):
             ex.call(capability="ocr", input="test", max_price=5.0, timeout=2.0)
 
-    def test_min_quality_clamped(self):
-        """min_quality outside 1-10 should be clamped, not error."""
-        ex = Exchange(api_key="demo")
-        # We can't call the server, but we can verify the request is built correctly
-        req = CallRequest(
-            capability="ocr", input="test",
-            max_price=5.0, min_quality=0, timeout=5.0
-        )
-        # The client clamps in call(), CallRequest doesn't validate
-        assert req.min_quality == 0  # CallRequest doesn't clamp
+    def test_min_quality_out_of_range_rejected(self):
+        """min_quality outside 1-10 is rejected by Pydantic."""
+        from pydantic import ValidationError
+        with pytest.raises(ValidationError):
+            CallRequest(capability="ocr", input="test",
+                        max_price=5.0, min_quality=0, timeout=5.0)
+        with pytest.raises(ValidationError):
+            CallRequest(capability="ocr", input="test",
+                        max_price=5.0, min_quality=11, timeout=5.0)
 
 
 # ═══════════════════════════════════════════════════════════════════════

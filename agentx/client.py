@@ -45,18 +45,12 @@ class Exchange:
             ConnectionError: Can't reach the exchange server
             RuntimeError: Server returned an unexpected error
         """
-        if not capability:
-            raise ValueError("capability is required")
-        if max_price <= 0:
-            raise ValueError("max_price must be positive")
-        if timeout <= 0:
-            raise ValueError("timeout must be positive")
-
+        # Pydantic validates constraints (min_length, gt=0, etc.)
         req = CallRequest(
             capability=capability,
             input=input,
             max_price=max_price,
-            min_quality=max(1, min(10, min_quality)),
+            min_quality=min_quality,
             timeout=timeout,
         )
 
