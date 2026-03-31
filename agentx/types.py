@@ -45,6 +45,7 @@ class CallRequest(BaseModel):
     min_quality: int = Field(6, ge=1, le=10)
     quality_criteria: list[str] = []
     # e.g. ["Must include code examples", "Cite sources", "Under 500 words"]
+    judge_model: str = ""  # override judge model (e.g. "gpt-5.4" for complex tasks)
 
     # Tool control
     tools: list[ToolDef] = []
