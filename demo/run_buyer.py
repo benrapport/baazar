@@ -13,16 +13,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from agentx import Exchange
 
 TASKS = [
-    {"capability": "general", "input": "What is 2+2?", "max_price": 0.02, "min_quality": 5},
-    {"capability": "general", "input": "Write a haiku about the ocean", "max_price": 0.05, "min_quality": 6},
-    {"capability": "general", "input": "Explain what an API is in 2 sentences", "max_price": 0.05, "min_quality": 7},
-    {"capability": "general", "input": "Write a Python function to check if a number is prime", "max_price": 0.08, "min_quality": 7},
-    {"capability": "general", "input": "List 5 pros and cons of remote work", "max_price": 0.06, "min_quality": 6},
-    {"capability": "general", "input": "Explain the difference between TCP and UDP", "max_price": 0.07, "min_quality": 7},
-    {"capability": "general", "input": "Write a short bedtime story about a robot", "max_price": 0.08, "min_quality": 7},
-    {"capability": "general", "input": "Implement binary search in Python with comments", "max_price": 0.10, "min_quality": 7},
-    {"capability": "general", "input": "Explain blockchain to a 10-year-old", "max_price": 0.06, "min_quality": 7},
-    {"capability": "general", "input": "Design a REST API schema for a todo-list app (just the endpoints)", "max_price": 0.12, "min_quality": 8},
+    {"input": "What is 2+2?", "max_price": 0.02, "min_quality": 5},
+    {"input": "Write a haiku about the ocean", "max_price": 0.05, "min_quality": 6},
+    {"input": "Explain what an API is in 2 sentences", "max_price": 0.05, "min_quality": 7},
+    {"input": "Write a Python function to check if a number is prime", "max_price": 0.08, "min_quality": 7},
+    {"input": "List 5 pros and cons of remote work", "max_price": 0.06, "min_quality": 6},
+    {"input": "Explain the difference between TCP and UDP", "max_price": 0.07, "min_quality": 7},
+    {"input": "Write a short bedtime story about a robot", "max_price": 0.08, "min_quality": 7},
+    {"input": "Implement binary search in Python with comments", "max_price": 0.10, "min_quality": 7},
+    {"input": "Explain blockchain to a 10-year-old", "max_price": 0.06, "min_quality": 7},
+    {"input": "Design a REST API schema for a todo-list app (just the endpoints)", "max_price": 0.12, "min_quality": 8},
 ]
 
 
@@ -45,7 +45,6 @@ def main():
         start = time.time()
         try:
             result = ex.call(
-                capability=task["capability"],
                 input=task["input"],
                 max_price=task["max_price"],
                 min_quality=task["min_quality"],

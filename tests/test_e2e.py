@@ -52,11 +52,7 @@ def test_full_e2e():
     print(f"  [OK] Status endpoint works: {data}")
 
     # 2. Register a mock agent (we'll submit work manually, no callback server)
-    reg = AgentRegistration(
-        agent_id="test-agent",
-        capabilities=["general"],
-        callback_url="http://127.0.0.1:19999",  # dummy — we won't use callbacks
-    )
+    reg = AgentRegistration(agent_id="test-agent")
     resp = client.post("/register", json=reg.model_dump())
     assert resp.status_code == 200
     assert resp.json()["status"] == "registered"
@@ -76,7 +72,6 @@ def test_full_e2e():
     def buyer_call():
         try:
             resp = client.post("/call", json={
-                "capability": "general",
                 "input": "What is 2+2?",
                 "max_price": 5.0,
                 "min_quality": 3,  # low threshold for test

@@ -10,8 +10,8 @@ class Exchange:
 
     Usage:
         ex = Exchange(api_key="ax_live_...")
-        result = ex.call(capability="ocr", input="...", max_price=5.0)
-        print(result.output, result.price_cents, result.agent_id)
+        result = ex.call(input="...", max_price=5.0)
+        print(result.output, result.price, result.agent_id)
     """
 
     def __init__(self, api_key: str = "demo",
@@ -24,13 +24,12 @@ class Exchange:
         self.server_url = server_url.rstrip("/")
         self._headers = {"Authorization": f"Bearer {api_key}"}
 
-    def call(self, capability: str, input: str,
+    def call(self, input: str,
              max_price: float, min_quality: int = 6,
              timeout: float = 30.0) -> ExchangeResult:
         """Submit a task to the exchange. Returns the winning result.
 
         Args:
-            capability: What kind of work (e.g., "ocr", "legal", "code")
             input: The actual task/input data
             max_price: Maximum price in USD you're willing to pay
             min_quality: Minimum quality score (1-10), default 6
@@ -45,9 +44,8 @@ class Exchange:
             ConnectionError: Can't reach the exchange server
             RuntimeError: Server returned an unexpected error
         """
-        # Pydantic validates constraints (min_length, gt=0, etc.)
+        # Pydantic validates constraints (gt=0, etc.)
         req = CallRequest(
-            capability=capability,
             input=input,
             max_price=max_price,
             min_quality=min_quality,

@@ -66,7 +66,6 @@ async def call_exchange(
     request_id = f"req_{uuid.uuid4().hex[:12]}"
     state = GameState(
         request_id=request_id,
-        capability=req.capability,
         input=req.input,
         max_price=req.max_price,
         min_quality=req.min_quality,
@@ -78,7 +77,6 @@ async def call_exchange(
 
     try:
         result = await run_game(
-            capability=req.capability,
             input_text=req.input,
             max_price=req.max_price,
             min_quality=req.min_quality,
@@ -106,11 +104,8 @@ async def call_exchange(
 @app.post("/register")
 async def register_agent(reg: AgentRegistration):
     """Agent registers itself with the exchange."""
-    agent = registry.register(
-        agent_id=reg.agent_id,
-        capabilities=reg.capabilities,
-    )
-    logger.info(f"Registered agent: {agent.agent_id} ({reg.capabilities})")
+    agent = registry.register(agent_id=reg.agent_id)
+    logger.info(f"Registered agent: {agent.agent_id}")
     return {"status": "registered", "agent_id": agent.agent_id}
 
 

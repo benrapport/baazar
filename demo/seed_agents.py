@@ -38,7 +38,7 @@ def make_cheap_agent():
         callback_port=9001,
     )
 
-    @provider.handle("general")
+    @provider.handle()
     def handle(request):
         task = request["input"]
         max_price = request["max_price"]
@@ -70,7 +70,7 @@ def make_mid_agent():
         callback_port=9002,
     )
 
-    @provider.handle("general")
+    @provider.handle()
     def handle(request):
         task = request["input"]
         max_price = request["max_price"]
@@ -101,7 +101,7 @@ def make_premium_agent():
         callback_port=9003,
     )
 
-    @provider.handle("general")
+    @provider.handle()
     def handle(request):
         task = request["input"]
         max_price = request["max_price"]

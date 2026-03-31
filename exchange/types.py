@@ -9,7 +9,6 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class RegisteredAgent(BaseModel):
     agent_id: str
-    capabilities: list[str]
     callback_url: str = ""  # optional — empty if agent uses WebSocket/poll
     status: str = "active"
     registered_at: float = Field(default_factory=time.time)
@@ -31,7 +30,6 @@ class Transaction(BaseModel):
     request_id: str
     buyer_id: str
     agent_id: str
-    capability: str
     price: float  # USD
     exchange_fee: float  # USD
     buyer_charged: float  # USD
@@ -45,7 +43,6 @@ class GameState(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     request_id: str
-    capability: str
     input: str
     max_price: float  # USD
     min_quality: int

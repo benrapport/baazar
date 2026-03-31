@@ -26,29 +26,22 @@ from agentx.client import Exchange
 class TestRegistry:
     def test_duplicate_registration_overwrites(self):
         reg = Registry()
-        reg.register("a1", ["ocr"], "http://old")
-        reg.register("a1", ["ocr", "translate"], "http://new")
+        reg.register("a1", "http://old")
+        reg.register("a1", "http://new")
         assert reg.count == 1
         agent = reg.get_agent("a1")
         assert agent.callback_url == "http://new"
-        assert "translate" in agent.capabilities
-
-    def test_empty_capabilities(self):
-        reg = Registry()
-        reg.register("a1", [], "http://x")
-        assert reg.get_agents_for_capability("ocr") == []
-        assert reg.count == 1
 
     def test_special_characters_in_agent_id(self):
         reg = Registry()
-        reg.register("a!@#$%^&*()", ["ocr"], "http://x")
+        reg.register("a!@#$%^&*()", "http://x")
         agent = reg.get_agent("a!@#$%^&*()")
         assert agent is not None
 
     def test_long_agent_id(self):
         reg = Registry()
         long_id = "x" * 10000
-        reg.register(long_id, ["ocr"], "http://x")
+        reg.register(long_id, "http://x")
         assert reg.get_agent(long_id) is not None
 
     def test_unregister_nonexistent(self):
@@ -57,22 +50,17 @@ class TestRegistry:
 
     def test_unregister_then_lookup(self):
         reg = Registry()
-        reg.register("a1", ["ocr"], "http://x")
+        reg.register("a1", "http://x")
         reg.unregister("a1")
         assert reg.get_agent("a1") is None
-        assert reg.get_agents_for_capability("ocr") == []
-
-    def test_lookup_nonexistent_capability(self):
-        reg = Registry()
-        reg.register("a1", ["ocr"], "http://x")
-        assert reg.get_agents_for_capability("legal") == []
+        assert reg.get_active_agents() == []
 
     def test_returns_all_agents_no_filtering(self):
         """Key invariant: registry returns ALL agents, no filtering."""
         reg = Registry()
         for i in range(50):
-            reg.register(f"a{i}", ["ocr"], f"http://host{i}")
-        assert len(reg.get_agents_for_capability("ocr")) == 50
+            reg.register(f"a{i}", f"http://host{i}")
+        assert len(reg.get_active_agents()) == 50
 
     def test_concurrent_registration(self):
         reg = Registry()
@@ -80,7 +68,7 @@ class TestRegistry:
 
         def register_agent(i):
             try:
-                reg.register(f"a{i}", ["ocr"], f"http://host{i}")
+                reg.register(f"a{i}", f"http://host{i}")
             except Exception as e:
                 errors.append(e)
 
@@ -97,7 +85,7 @@ class TestRegistry:
     def test_concurrent_register_and_unregister(self):
         reg = Registry()
         for i in range(50):
-            reg.register(f"a{i}", ["ocr"], f"http://host{i}")
+            reg.register(f"a{i}", f"http://host{i}")
 
         errors = []
 
@@ -109,7 +97,7 @@ class TestRegistry:
 
         def register_new(i):
             try:
-                reg.register(f"new{i}", ["ocr"], f"http://new{i}")
+                reg.register(f"new{i}", f"http://new{i}")
             except Exception as e:
                 errors.append(e)
 
@@ -127,18 +115,16 @@ class TestRegistry:
 
     def test_inactive_agent_not_returned(self):
         reg = Registry()
-        agent = reg.register("a1", ["ocr"], "http://x")
+        agent = reg.register("a1", "http://x")
         # Manually mark inactive
         agent.status = "inactive"
-        assert reg.get_agents_for_capability("ocr") == []
+        assert reg.get_active_agents() == []
 
-    def test_multiple_capabilities_per_agent(self):
+    def test_register_without_callback_url(self):
         reg = Registry()
-        reg.register("a1", ["ocr", "translate", "summarize"], "http://x")
-        assert len(reg.get_agents_for_capability("ocr")) == 1
-        assert len(reg.get_agents_for_capability("translate")) == 1
-        assert len(reg.get_agents_for_capability("summarize")) == 1
-        assert len(reg.get_agents_for_capability("code")) == 0
+        agent = reg.register("a1")
+        assert agent.callback_url == ""
+        assert reg.count == 1
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -408,7 +394,7 @@ class TestSettlement:
 
     def test_ledger_record_and_query(self):
         ledger = Ledger()
-        tx = ledger.record("r1", "b1", "a1", "ocr", 0.03, 0.05, 8, 200)
+        tx = ledger.record("r1", "b1", "a1", 0.03, 0.05, 8, 200)
         assert tx.price == 0.03
         assert abs(tx.exchange_fee - 0.004) < 0.0001  # 20% of $0.02
         assert abs(tx.buyer_charged - 0.034) < 0.0001
@@ -416,16 +402,16 @@ class TestSettlement:
 
     def test_ledger_query_by_buyer(self):
         ledger = Ledger()
-        ledger.record("r1", "b1", "a1", "ocr", 3.0, 5.0, 8, 200)
-        ledger.record("r2", "b2", "a2", "ocr", 2.0, 5.0, 7, 300)
+        ledger.record("r1", "b1", "a1", 3.0, 5.0, 8, 200)
+        ledger.record("r2", "b2", "a2", 2.0, 5.0, 7, 300)
         assert len(ledger.get_transactions(buyer_id="b1")) == 1
         assert len(ledger.get_transactions(buyer_id="b2")) == 1
         assert len(ledger.get_transactions(buyer_id="b3")) == 0
 
     def test_ledger_query_by_agent(self):
         ledger = Ledger()
-        ledger.record("r1", "b1", "a1", "ocr", 3.0, 5.0, 8, 200)
-        ledger.record("r2", "b2", "a1", "ocr", 2.0, 5.0, 7, 300)
+        ledger.record("r1", "b1", "a1", 3.0, 5.0, 8, 200)
+        ledger.record("r2", "b2", "a1", 2.0, 5.0, 7, 300)
         assert len(ledger.get_transactions(agent_id="a1")) == 2
 
     def test_ledger_totals_empty(self):
@@ -436,8 +422,8 @@ class TestSettlement:
 
     def test_ledger_totals_multiple(self):
         ledger = Ledger()
-        ledger.record("r1", "b1", "a1", "ocr", 0.03, 0.05, 8, 200)
-        ledger.record("r2", "b1", "a2", "ocr", 0.02, 0.05, 7, 300)
+        ledger.record("r1", "b1", "a1", 0.03, 0.05, 8, 200)
+        ledger.record("r2", "b1", "a2", 0.02, 0.05, 7, 300)
         totals = ledger.get_totals()
         assert totals["total_transactions"] == 2
         assert abs(totals["total_volume"] - 0.05) < 0.001
@@ -448,7 +434,7 @@ class TestSettlement:
 
         def write(i):
             try:
-                ledger.record(f"r{i}", "b1", f"a{i}", "ocr",
+                ledger.record(f"r{i}", "b1", f"a{i}",
                               float(i), 100.0, 7, 100)
             except Exception as e:
                 errors.append(e)
@@ -470,7 +456,7 @@ class TestSettlement:
 
 def _make_state(**kwargs) -> GameState:
     defaults = dict(
-        request_id="r1", capability="ocr", input="test",
+        request_id="r1", input="test",
         max_price=5.0, min_quality=7, buyer_id="b1",
     )
     defaults.update(kwargs)
@@ -503,8 +489,19 @@ class TestReceiveSubmission:
         assert receive_submission(state, "a1", 0.0, "output") is True
 
     def test_accept_bid_at_exact_max_price(self):
+        """bid=5.0, buyer_ask=5.0: spread=0, fee=0, total=5.0 — accepted."""
         state = _make_state(max_price=5.0)
         assert receive_submission(state, "a1", 5.0, "output") is True
+
+    def test_reject_bid_plus_fee_exceeds_buyer_ask(self):
+        """bid + exchange_fee must not exceed buyer_ask."""
+        # buyer_ask=0.05, bid=0.049
+        # spread=0.001, fee=20%*0.001=0.0002, total=0.0492 — accepted
+        state = _make_state(max_price=0.05)
+        assert receive_submission(state, "a1", 0.049, "output") is True
+        # buyer_ask=0.05, bid=0.0499
+        # spread=0.0001, fee=20%*0.0001=0.00002, total=0.04992 — accepted
+        assert receive_submission(state, "a2", 0.0499, "output") is True
 
     def test_empty_work_accepted(self):
         state = _make_state()
@@ -594,13 +591,6 @@ class TestGetQualifiers:
             work="ok", score=6)
         assert _get_qualifiers(state) == []
 
-    def test_bid_over_max_excluded(self):
-        state = _make_state(max_price=5.0, min_quality=7)
-        state.submissions["a1"] = Submission(
-            agent_id="a1", request_id="r1", bid=6.0,
-            work="good", score=9)
-        assert _get_qualifiers(state) == []
-
     def test_unscored_submission_excluded(self):
         state = _make_state(min_quality=7)
         state.submissions["a1"] = Submission(
@@ -663,44 +653,39 @@ class TestExchangeClient:
         with pytest.raises(ValueError, match="server_url"):
             Exchange(api_key="demo", server_url="")
 
-    def test_call_empty_capability_raises(self):
-        ex = Exchange(api_key="demo")
-        with pytest.raises(ValueError, match="capability"):
-            ex.call(capability="", input="test", max_price=5.0)
-
     def test_call_negative_max_price_raises(self):
         ex = Exchange(api_key="demo")
-        with pytest.raises(ValueError, match="max_price"):
-            ex.call(capability="ocr", input="test", max_price=-1.0)
+        with pytest.raises(ValueError):
+            ex.call(input="test", max_price=-1.0)
 
     def test_call_zero_max_price_raises(self):
         ex = Exchange(api_key="demo")
-        with pytest.raises(ValueError, match="max_price"):
-            ex.call(capability="ocr", input="test", max_price=0.0)
+        with pytest.raises(ValueError):
+            ex.call(input="test", max_price=0.0)
 
     def test_call_negative_timeout_raises(self):
         ex = Exchange(api_key="demo")
-        with pytest.raises(ValueError, match="timeout"):
-            ex.call(capability="ocr", input="test", max_price=5.0, timeout=-1.0)
+        with pytest.raises(ValueError):
+            ex.call(input="test", max_price=5.0, timeout=-1.0)
 
     def test_call_zero_timeout_raises(self):
         ex = Exchange(api_key="demo")
-        with pytest.raises(ValueError, match="timeout"):
-            ex.call(capability="ocr", input="test", max_price=5.0, timeout=0.0)
+        with pytest.raises(ValueError):
+            ex.call(input="test", max_price=5.0, timeout=0.0)
 
     def test_server_not_running_raises_connection_error(self):
         ex = Exchange(api_key="demo", server_url="http://localhost:19999")
         with pytest.raises(ConnectionError, match="Cannot connect"):
-            ex.call(capability="ocr", input="test", max_price=5.0, timeout=2.0)
+            ex.call(input="test", max_price=5.0, timeout=2.0)
 
     def test_min_quality_out_of_range_rejected(self):
         """min_quality outside 1-10 is rejected by Pydantic."""
         from pydantic import ValidationError
         with pytest.raises(ValidationError):
-            CallRequest(capability="ocr", input="test",
+            CallRequest(input="test",
                         max_price=5.0, min_quality=0, timeout=5.0)
         with pytest.raises(ValidationError):
-            CallRequest(capability="ocr", input="test",
+            CallRequest(input="test",
                         max_price=5.0, min_quality=11, timeout=5.0)
 
 
@@ -724,7 +709,7 @@ class TestTypes:
     def test_transaction_auto_generates_tx_id(self):
         tx = Transaction(
             request_id="r1", buyer_id="b1", agent_id="a1",
-            capability="ocr", price=3.0,
+            price=3.0,
             exchange_fee=0.4, buyer_charged=3.4)
         assert tx.tx_id.startswith("tx_")
 

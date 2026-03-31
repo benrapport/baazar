@@ -23,11 +23,10 @@ from exchange.types import GameState, RegisteredAgent, Submission
 logger = logging.getLogger(__name__)
 
 HARD_TIMEOUT = 60.0
-CHECK_INTERVAL = 0.05  # 50ms
+CHECK_INTERVAL = 0.025  # 25ms
 
 
 async def run_game(
-    capability: str,
     input_text: str,
     max_price: float,
     min_quality: int,
@@ -46,14 +45,13 @@ async def run_game(
     min_quality = max(1, min(10, min_quality))
     timeout = max(1.0, timeout)
 
-    agents = registry.get_agents_for_capability(capability)
+    agents = registry.get_active_agents()
     if not agents:
-        raise ValueError(f"No agents registered for capability '{capability}'")
+        raise ValueError("No agents registered")
 
     if state is None:
         state = GameState(
             request_id=f"req_{uuid.uuid4().hex[:12]}",
-            capability=capability,
             input=input_text,
             max_price=max_price,
             min_quality=min_quality,
@@ -67,7 +65,6 @@ async def run_game(
 
     payload = BroadcastPayload(
         request_id=request_id,
-        capability=capability,
         input=input_text,
         max_price=max_price,
         min_quality=min_quality,
@@ -91,9 +88,8 @@ async def run_game(
         request_id=request_id,
         buyer_id=buyer_id,
         agent_id=result.agent_id,
-        capability=capability,
         price=winner_sub.bid,
-        buyer_max=max_price,
+        buyer_ask=max_price,
         score=winner_sub.score,
         latency_ms=result.latency_ms,
     )
@@ -147,7 +143,7 @@ async def _wait_for_winner(state: GameState, judge: Judge,
     Rules:
     - Each submission gets its own concurrent judge task
     - Judges only SCORE — they don't pick winners
-    - The main loop (every 50ms) checks scored submissions
+    - The main loop (every 25ms) checks scored submissions
     - Winner = earliest-timestamped submission that qualifies
     - We NEVER declare a winner while an earlier submission is still being judged
     """
@@ -200,7 +196,6 @@ async def _wait_for_winner(state: GameState, judge: Judge,
                 (aid, sub) for aid, sub in state.submissions.items()
                 if sub.score is not None
                 and sub.score >= state.min_quality
-                and sub.bid <= state.max_price
             ]
 
         if qualifiers:
@@ -228,41 +223,25 @@ async def _wait_for_winner(state: GameState, judge: Judge,
                     score=best_sub.score,
                 )
 
-    # Deadline passed — wait briefly for in-flight judges
-    if judge_tasks:
-        await asyncio.wait(judge_tasks, timeout=5.0)
-
-    # Return best scored submission as fallback
+    # Deadline passed — no qualifier found. Order not filled.
     with state.lock:
-        subs = dict(state.submissions)
-
-    scored = [(aid, sub) for aid, sub in subs.items() if sub.score is not None]
-    if scored:
-        best_aid, best_sub = min(scored, key=lambda x: (-x[1].score, x[1].bid))
-        with state.lock:
-            state.winner = best_aid
-            state.done = True
-        return ExchangeResult(
-            output=best_sub.work,
-            agent_id=best_aid,
-            price=best_sub.bid,
-            latency_ms=(time.time() - state.start_time) * 1000,
-            score=best_sub.score,
-        )
-
+        state.done = True
     return None
 
 
 # ── Helpers (used by tests + external callers) ────────────────────────
 
 def _get_qualifiers(state: GameState) -> list[str]:
-    """Return agent IDs whose submissions meet quality threshold."""
+    """Return agent IDs whose submissions meet quality threshold.
+
+    Bid validity (bid + fee <= buyer_ask) is enforced at submission time,
+    so qualifiers only need to check score.
+    """
     with state.lock:
         return [
             aid for aid, sub in state.submissions.items()
             if sub.score is not None
             and sub.score >= state.min_quality
-            and sub.bid <= state.max_price
         ]
 
 
@@ -289,13 +268,19 @@ def _select_winner(state: GameState,
 
 def receive_submission(state: GameState, agent_id: str,
                        bid: float, work: str) -> bool:
-    """Called when an agent POSTs a submission. Returns True if accepted."""
+    """Called when an agent POSTs a submission. Returns True if accepted.
+
+    Rejects bids where bid + exchange_fee would exceed buyer_ask.
+    """
+    from exchange.settlement import calc_exchange_fee
+
     with state.lock:
         if state.done:
             return False
-        if bid > state.max_price:
-            return False
         if bid < 0:
+            return False
+        fee = calc_exchange_fee(state.max_price, bid)
+        if bid + fee > state.max_price:
             return False
 
         existing = state.submissions.get(agent_id)

@@ -19,7 +19,7 @@ def test_exchange_result():
     assert r.score is None
 
 def test_call_request_defaults():
-    r = CallRequest(capability="ocr", input="img", max_price=5.0)
+    r = CallRequest(input="img", max_price=5.0)
     assert r.min_quality == 6
     assert r.timeout == 30.0
 
@@ -29,7 +29,7 @@ def test_submission():
     assert s.score is None
 
 def test_game_state():
-    g = GameState(request_id="r1", capability="ocr", input="img",
+    g = GameState(request_id="r1", input="img",
                   max_price=5.0, min_quality=7, buyer_id="b1")
     assert g.winner is None
     assert g.done is False
@@ -40,34 +40,28 @@ def test_game_state():
 
 def test_registry_register_and_lookup():
     reg = Registry()
-    reg.register("a1", ["ocr", "translate"], "http://localhost:9001")
-    reg.register("a2", ["ocr"], "http://localhost:9002")
-    reg.register("a3", ["code"], "http://localhost:9003")
+    reg.register("a1", "http://localhost:9001")
+    reg.register("a2", "http://localhost:9002")
+    reg.register("a3", "http://localhost:9003")
 
-    ocr_agents = reg.get_agents_for_capability("ocr")
-    assert len(ocr_agents) == 2
-    assert {a.agent_id for a in ocr_agents} == {"a1", "a2"}
-
-    code_agents = reg.get_agents_for_capability("code")
-    assert len(code_agents) == 1
-
-    none_agents = reg.get_agents_for_capability("legal")
-    assert len(none_agents) == 0
+    agents = reg.get_active_agents()
+    assert len(agents) == 3
+    assert {a.agent_id for a in agents} == {"a1", "a2", "a3"}
 
 def test_registry_unregister():
     reg = Registry()
-    reg.register("a1", ["ocr"], "http://localhost:9001")
+    reg.register("a1", "http://localhost:9001")
     assert reg.count == 1
     reg.unregister("a1")
     assert reg.count == 0
-    assert reg.get_agents_for_capability("ocr") == []
+    assert reg.get_active_agents() == []
 
 def test_registry_returns_all_no_filtering():
-    """Key test: registry returns ALL agents, no filtering by price/load/reputation."""
+    """Key test: registry returns ALL agents, no filtering."""
     reg = Registry()
     for i in range(20):
-        reg.register(f"a{i}", ["ocr"], f"http://localhost:{9000+i}")
-    agents = reg.get_agents_for_capability("ocr")
+        reg.register(f"a{i}", f"http://localhost:{9000+i}")
+    agents = reg.get_active_agents()
     assert len(agents) == 20
 
 
@@ -88,7 +82,7 @@ def test_ledger_record_and_query():
     ledger = Ledger()
     tx = ledger.record(
         request_id="r1", buyer_id="b1", agent_id="a1",
-        capability="ocr", price=0.03, buyer_max=0.05,
+        price=0.03, buyer_ask=0.05,
         score=8, latency_ms=200,
     )
     assert tx.price == 0.03
@@ -106,8 +100,8 @@ def test_ledger_record_and_query():
 
 def test_ledger_totals():
     ledger = Ledger()
-    ledger.record("r1", "b1", "a1", "ocr", 0.03, 0.05, 8, 200)
-    ledger.record("r2", "b1", "a2", "ocr", 0.02, 0.05, 7, 300)
+    ledger.record("r1", "b1", "a1", 0.03, 0.05, 8, 200)
+    ledger.record("r2", "b1", "a2", 0.02, 0.05, 7, 300)
     totals = ledger.get_totals()
     assert totals["total_transactions"] == 2
     assert abs(totals["total_volume"] - 0.05) < 0.001
@@ -147,7 +141,7 @@ def test_parse_json_no_json_raises():
 
 def test_receive_submission():
     from exchange.game import receive_submission
-    state = GameState(request_id="r1", capability="ocr", input="img",
+    state = GameState(request_id="r1", input="img",
                       max_price=5.0, min_quality=7, buyer_id="b1")
 
     assert receive_submission(state, "a1", 3.0, "output") is True
@@ -156,20 +150,20 @@ def test_receive_submission():
 
 def test_receive_submission_rejects_over_max_price():
     from exchange.game import receive_submission
-    state = GameState(request_id="r1", capability="ocr", input="img",
+    state = GameState(request_id="r1", input="img",
                       max_price=5.0, min_quality=7, buyer_id="b1")
     assert receive_submission(state, "a1", 6.0, "output") is False
 
 def test_receive_submission_rejects_when_done():
     from exchange.game import receive_submission
-    state = GameState(request_id="r1", capability="ocr", input="img",
+    state = GameState(request_id="r1", input="img",
                       max_price=5.0, min_quality=7, buyer_id="b1")
     state.done = True
     assert receive_submission(state, "a1", 3.0, "output") is False
 
 def test_receive_revision_increments():
     from exchange.game import receive_submission
-    state = GameState(request_id="r1", capability="ocr", input="img",
+    state = GameState(request_id="r1", input="img",
                       max_price=5.0, min_quality=7, buyer_id="b1")
     receive_submission(state, "a1", 3.0, "v1")
     assert state.submissions["a1"].revision == 0
@@ -179,7 +173,7 @@ def test_receive_revision_increments():
 
 def test_get_qualifiers():
     from exchange.game import _get_qualifiers
-    state = GameState(request_id="r1", capability="ocr", input="img",
+    state = GameState(request_id="r1", input="img",
                       max_price=5.0, min_quality=7, buyer_id="b1")
     state.submissions["a1"] = Submission(
         agent_id="a1", request_id="r1", bid=3.0,
@@ -197,7 +191,7 @@ def test_get_qualifiers():
 def test_select_winner_picks_earliest_timestamp():
     from exchange.game import _select_winner
     from exchange.types import Submission
-    state = GameState(request_id="r1", capability="ocr", input="img",
+    state = GameState(request_id="r1", input="img",
                       max_price=5.0, min_quality=7, buyer_id="b1")
     state.submissions["a1"] = Submission(
         agent_id="a1", request_id="r1", bid=3.0,
