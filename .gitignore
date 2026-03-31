@@ -1,0 +1,11 @@
+.env
+.context/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.claude/
+
+# Research & internal docs (kept locally, not shipped)
+research/
+SYSTEM_DESIGN.md
