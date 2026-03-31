@@ -92,9 +92,14 @@ class SimulationRunner:
             logger.info("Fetching market logs from exchange...")
             await self._fetch_market_logs()
 
-            # 7. Generate and save summary
+            # 7. Generate and save summary (include agent costs for PnL)
             logger.info("Generating summary...")
+            agent_costs = {}
+            if self._fleet:
+                for stat in self._fleet.get_agent_stats():
+                    agent_costs[stat["agent_id"]] = stat["total_cost_usd"]
             summary = generate_summary(results)
+            summary["agent_costs_usd"] = agent_costs
             summary_file = save_summary(summary, output_dir=self.output_dir)
             logger.info(f"Summary written to {summary_file}")
 
