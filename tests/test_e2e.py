@@ -51,7 +51,7 @@ def test_full_e2e():
     print(f"  [OK] Status endpoint works: {data}")
 
     # 2. Register a mock agent (we'll submit work manually, no callback server)
-    reg = AgentRegistration(agent_id="test-agent")
+    reg = AgentRegistration(agent_id="test-agent", callback_url="http://127.0.0.1:19999")
     resp = client.post("/register", json=reg.model_dump())
     assert resp.status_code == 200
     assert resp.json()["status"] == "registered"

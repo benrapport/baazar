@@ -91,6 +91,7 @@ class SubmissionPayload(BaseModel):
 class AgentRegistration(BaseModel):
     """What an agent sends to register itself."""
     agent_id: str = Field(..., min_length=1, max_length=256)
+    callback_url: str = Field(..., min_length=1)  # e.g. "http://127.0.0.1:9001"
 
 
 class BroadcastPayload(BaseModel):

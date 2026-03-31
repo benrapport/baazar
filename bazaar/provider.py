@@ -117,7 +117,10 @@ class AgentProvider:
 
     def _register_with_exchange(self):
         """Register this agent with the exchange server."""
-        reg = AgentRegistration(agent_id=self.agent_id)
+        reg = AgentRegistration(
+            agent_id=self.agent_id,
+            callback_url=self.callback_url,
+        )
         try:
             with httpx.Client(timeout=5.0) as client:
                 resp = client.post(
