@@ -6,6 +6,8 @@ import time
 import uuid
 from pydantic import BaseModel, ConfigDict, Field
 
+from exchange.market_log import MarketLog
+
 
 class RegisteredAgent(BaseModel):
     agent_id: str
@@ -54,3 +56,4 @@ class GameState(BaseModel):
     done: bool = False
     timeout: float = 60.0
     lock: threading.Lock = Field(default_factory=threading.Lock, exclude=True)
+    market_log: MarketLog | None = Field(default=None, exclude=True)

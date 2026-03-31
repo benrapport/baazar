@@ -16,6 +16,7 @@ import httpx
 
 from bazaar.types import BroadcastPayload, ExchangeResult, LLMConfig
 from exchange.judge import Judge
+from exchange.market_log import MarketLog, MarketLogStore
 from exchange.registry import Registry
 from exchange.settlement import Ledger
 from exchange.types import GameState, RegisteredAgent, Submission
@@ -38,6 +39,7 @@ async def run_game(
     quality_criteria: list[str] | None = None,
     state: GameState | None = None,
     llm_config: LLMConfig | None = None,
+    market_log_store: MarketLogStore | None = None,
 ) -> ExchangeResult:
     """Run a full game for one buyer request."""
 
@@ -64,6 +66,20 @@ async def run_game(
     request_id = state.request_id
     deadline = state.start_time + timeout
 
+    # Initialize market log
+    mlog = MarketLog(
+        request_id=request_id,
+        input=input_text,
+        max_price=max_price,
+        min_quality=min_quality,
+        quality_criteria=quality_criteria or [],
+        buyer_id=buyer_id,
+        agents_invited=[a.agent_id for a in agents],
+        opened_at=state.start_time,
+    )
+    state.market_log = mlog
+    mlog.emit("market_opened", timeout=timeout)
+
     llm = llm_config
     payload = BroadcastPayload(
         request_id=request_id,
@@ -81,11 +97,19 @@ async def run_game(
     )
 
     logger.info(f"[{request_id}] Broadcasting to {len(agents)} agents")
-    await _broadcast(payload, agents, deadline)
+    await _broadcast(payload, agents, deadline, mlog)
 
     result = await _wait_for_winner(state, judge, deadline)
 
     if result is None:
+        mlog.emit(
+            "market_timeout",
+            submissions_received=len(state.submissions),
+            timeout=timeout,
+        )
+        mlog.closed_at = time.time()
+        if market_log_store:
+            market_log_store.store(mlog)
         raise TimeoutError(
             f"No qualifying submission within {timeout}s "
             f"({len(state.submissions)} submissions received)"
@@ -101,6 +125,29 @@ async def run_game(
         score=winner_sub.score,
         latency_ms=result.latency_ms,
     )
+
+    mlog.emit(
+        "winner_selected",
+        agent_id=result.agent_id,
+        bid=winner_sub.bid,
+        score=winner_sub.score,
+        latency_ms=result.latency_ms,
+        reason="earliest qualifying submission",
+    )
+    mlog.emit(
+        "market_settled",
+        tx_id=tx.tx_id,
+        agent_id=result.agent_id,
+        price=winner_sub.bid,
+        exchange_fee=tx.exchange_fee,
+        buyer_charged=tx.buyer_charged,
+    )
+    mlog.winner = result.agent_id
+    mlog.closed_at = time.time()
+
+    if market_log_store:
+        market_log_store.store(mlog)
+
     logger.info(
         f"[{request_id}] Winner: {result.agent_id} @ ${winner_sub.bid:.4f} "
         f"(score {winner_sub.score}/10, fee ${tx.exchange_fee:.4f})"
@@ -114,7 +161,8 @@ async def run_game(
 
 async def _broadcast(payload: BroadcastPayload,
                      agents: list[RegisteredAgent],
-                     deadline: float) -> None:
+                     deadline: float,
+                     mlog: MarketLog) -> None:
     """Send full request to ALL agents. Fire-and-forget."""
     remaining = deadline - time.time()
     if remaining <= 0:
@@ -124,7 +172,7 @@ async def _broadcast(payload: BroadcastPayload,
 
     async def send_limited(agent):
         async with semaphore:
-            await _send_to_agent(client, agent, payload)
+            await _send_to_agent(client, agent, payload, mlog)
 
     async with httpx.AsyncClient(timeout=timeout_secs) as client:
         tasks = [send_limited(agent) for agent in agents]
@@ -133,12 +181,15 @@ async def _broadcast(payload: BroadcastPayload,
 
 async def _send_to_agent(client: httpx.AsyncClient,
                          agent: RegisteredAgent,
-                         payload: BroadcastPayload) -> None:
+                         payload: BroadcastPayload,
+                         mlog: MarketLog) -> None:
     try:
         url = f"{agent.callback_url}/request"
         await client.post(url, json=payload.model_dump())
+        mlog.emit("broadcast_sent", agent_id=agent.agent_id, status="ok")
         logger.debug(f"Broadcast to {agent.agent_id} OK")
     except Exception as e:
+        mlog.emit("broadcast_failed", agent_id=agent.agent_id, error=str(e))
         logger.warning(f"Broadcast to {agent.agent_id} failed: {e}")
 
 
@@ -158,9 +209,12 @@ async def _wait_for_winner(state: GameState, judge: Judge,
     scored_versions: dict[str, int] = {}  # agent_id -> revision we sent to judge
     judging: set[str] = set()             # agent_ids currently being judged
     judge_tasks: list[asyncio.Task] = []
+    mlog = state.market_log
 
     async def _score_one(agent_id: str, sub: Submission):
         """Score a submission. Only writes score — does NOT pick winner."""
+        if mlog:
+            mlog.emit("judge_started", agent_id=agent_id, revision=sub.revision)
         try:
             criteria = state.quality_criteria or None
             result = await asyncio.to_thread(
@@ -170,10 +224,20 @@ async def _wait_for_winner(state: GameState, judge: Judge,
                 if agent_id in state.submissions:
                     state.submissions[agent_id].score = result["score"]
                     state.submissions[agent_id].feedback = result["feedback"]
+            if mlog:
+                mlog.emit(
+                    "judge_completed",
+                    agent_id=agent_id,
+                    score=result["score"],
+                    feedback=result["feedback"],
+                    qualified=result["score"] >= state.min_quality,
+                )
             logger.info(
                 f"[{state.request_id}] {agent_id}: {result['score']}/10"
             )
         except Exception as e:
+            if mlog:
+                mlog.emit("judge_error", agent_id=agent_id, error=str(e))
             logger.error(f"[{state.request_id}] Judge error for {agent_id}: {e}")
         finally:
             judging.discard(agent_id)
@@ -281,13 +345,24 @@ def receive_submission(state: GameState, agent_id: str,
     """
     from exchange.settlement import calc_exchange_fee
 
+    mlog = state.market_log
+
     with state.lock:
         if state.done:
+            if mlog:
+                mlog.emit("bid_rejected", agent_id=agent_id, bid=bid,
+                          reason="market closed")
             return False
         if bid < 0:
+            if mlog:
+                mlog.emit("bid_rejected", agent_id=agent_id, bid=bid,
+                          reason="negative bid")
             return False
         fee = calc_exchange_fee(state.max_price, bid)
         if bid + fee > state.max_price:
+            if mlog:
+                mlog.emit("bid_rejected", agent_id=agent_id, bid=bid,
+                          fee=fee, reason="bid + fee exceeds max_price")
             return False
 
         existing = state.submissions.get(agent_id)
@@ -300,4 +375,7 @@ def receive_submission(state: GameState, agent_id: str,
             work=work,
             revision=revision,
         )
+        if mlog:
+            mlog.emit("bid_received", agent_id=agent_id, bid=bid,
+                       revision=revision)
         return True

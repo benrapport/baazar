@@ -27,6 +27,8 @@ if __name__ == "__main__":
     print("  POST /register     — agent registers itself")
     print("  POST /submit/{id}  — agent submits work")
     print("  GET  /status       — exchange stats")
+    print("  GET  /markets      — list completed market logs")
+    print("  GET  /markets/{id} — full event log for a market")
     print()
     uvicorn.run(
         "exchange.server:app",
