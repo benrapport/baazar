@@ -72,7 +72,7 @@ class SubmissionPayload(BaseModel):
 class AgentRegistration(BaseModel):
     """What an agent sends to register itself."""
     agent_id: str = Field(..., min_length=1, max_length=256)
-    # No callback_url — agents connect via WebSocket or poll
+    callback_url: str = ""  # HTTP callback URL for receiving broadcasts
 
 
 class BroadcastPayload(BaseModel):

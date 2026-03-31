@@ -102,10 +102,21 @@ class AgentProvider:
                         f"{self.exchange_url}/submit/{payload.request_id}",
                         json=sub.model_dump(),
                     )
-                    logger.info(
-                        f"Submitted to {payload.request_id}: "
-                        f"bid=${bid:.4f}, status={resp.status_code}"
-                    )
+                    if resp.status_code == 404:
+                        logger.warning(
+                            f"Auction {payload.request_id} already closed "
+                            f"(agent too slow), bid=${bid:.4f}"
+                        )
+                    elif resp.status_code >= 400:
+                        logger.warning(
+                            f"Submission rejected for {payload.request_id}: "
+                            f"bid=${bid:.4f}, status={resp.status_code}"
+                        )
+                    else:
+                        logger.info(
+                            f"Submitted to {payload.request_id}: "
+                            f"bid=${bid:.4f}, accepted"
+                        )
             except Exception as e:
                 logger.error(f"Failed to submit: {e}")
 
@@ -117,7 +128,7 @@ class AgentProvider:
 
     def _register_with_exchange(self):
         """Register this agent with the exchange server."""
-        reg = AgentRegistration(agent_id=self.agent_id)
+        reg = AgentRegistration(agent_id=self.agent_id, callback_url=self.callback_url)
         try:
             with httpx.Client(timeout=5.0) as client:
                 resp = client.post(

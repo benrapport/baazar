@@ -104,7 +104,7 @@ class Judge:
         try:
             resp = self._client.chat.completions.create(
                 model=self._model,
-                max_tokens=256,
+                max_completion_tokens=256,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": prompt},
@@ -134,7 +134,7 @@ class Judge:
         try:
             resp = self._client.chat.completions.create(
                 model=self._model,
-                max_tokens=1024,
+                max_completion_tokens=1024,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": "\n".join(parts)},

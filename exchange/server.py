@@ -104,7 +104,7 @@ async def call_exchange(
 @app.post("/register")
 async def register_agent(reg: AgentRegistration):
     """Agent registers itself with the exchange."""
-    agent = registry.register(agent_id=reg.agent_id)
+    agent = registry.register(agent_id=reg.agent_id, callback_url=reg.callback_url)
     logger.info(f"Registered agent: {agent.agent_id}")
     return {"status": "registered", "agent_id": agent.agent_id}
 
