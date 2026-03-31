@@ -1,4 +1,4 @@
-"""Judge — scores agent submissions using gpt-4.1-nano."""
+"""Judge — scores agent submissions using an LLM."""
 
 from __future__ import annotations
 import json
@@ -8,40 +8,40 @@ from exchange.types import Submission
 
 logger = logging.getLogger(__name__)
 
-JUDGE_MODEL = "gpt-4.1-nano"
-MAX_WORK_CHARS = 50_000  # truncate submissions longer than this
+DEFAULT_JUDGE_MODEL = "gpt-4.1-nano"
 
-JUDGE_SYSTEM = """\
-You are scoring AI-generated work for a marketplace. Rate the submission 1-10.
+DEFAULT_CRITERIA = [
+    "Correctness: Does it accurately complete the task?",
+    "Completeness: Is anything missing?",
+    "Clarity: Is it well-written and easy to understand?",
+    "Effort: Does it show genuine effort, not a minimal throwaway answer?",
+]
 
-Scoring criteria:
-- Correctness: Does it accurately complete the task?
-- Completeness: Is anything missing?
-- Clarity: Is it well-written and easy to understand?
-- Effort: Does it show genuine effort, not a minimal throwaway answer?
 
-Be a fair but demanding judge. 7 = good professional quality.
-5 = mediocre. 9-10 = excellent.
+def _build_judge_prompt(criteria: list[str], batch: bool = False) -> str:
+    """Build judge system prompt from criteria list."""
+    criteria_text = "\n".join(f"- {c}" for c in criteria)
 
-Respond with ONLY valid JSON:
-{"score": <1-10>, "feedback": "<1-2 sentence feedback>"}
-"""
-
-BATCH_JUDGE_SYSTEM = """\
-You are scoring AI-generated work for a marketplace. Rate each submission 1-10.
-
-Scoring criteria:
-- Correctness: Does it accurately complete the task?
-- Completeness: Is anything missing?
-- Clarity: Is it well-written and easy to understand?
-- Effort: Does it show genuine effort, not a minimal throwaway answer?
-
-Be a fair but demanding judge. 7 = good professional quality.
-5 = mediocre. 9-10 = excellent.
-
-Respond with ONLY valid JSON:
-{"scores": {"<agent_id>": {"score": <1-10>, "feedback": "<1-2 sentences>"}, ...}}
-"""
+    if batch:
+        return (
+            "You are scoring AI-generated work for a marketplace. "
+            "Rate each submission 1-10.\n\n"
+            f"Scoring criteria:\n{criteria_text}\n\n"
+            "Be a fair but demanding judge. 7 = good professional quality. "
+            "5 = mediocre. 9-10 = excellent.\n\n"
+            "Respond with ONLY valid JSON:\n"
+            '{"scores": {"<agent_id>": {"score": <1-10>, '
+            '"feedback": "<1-2 sentences>"}, ...}}'
+        )
+    return (
+        "You are scoring AI-generated work for a marketplace. "
+        "Rate the submission 1-10.\n\n"
+        f"Scoring criteria:\n{criteria_text}\n\n"
+        "Be a fair but demanding judge. 7 = good professional quality. "
+        "5 = mediocre. 9-10 = excellent.\n\n"
+        "Respond with ONLY valid JSON:\n"
+        '{"score": <1-10>, "feedback": "<1-2 sentence feedback>"}'
+    )
 
 
 def parse_json(raw: str) -> dict:
@@ -73,11 +73,11 @@ def _clamp_score(raw_score) -> int:
     try:
         score = int(raw_score)
     except (TypeError, ValueError):
-        return 1  # unparseable → lowest score
+        return 1
     return max(1, min(10, score))
 
 
-def _truncate(text: str, max_chars: int = MAX_WORK_CHARS) -> str:
+def _truncate(text: str, max_chars: int = 50_000) -> str:
     """Truncate work to prevent token overflow in judge prompt."""
     if len(text) <= max_chars:
         return text
@@ -85,26 +85,28 @@ def _truncate(text: str, max_chars: int = MAX_WORK_CHARS) -> str:
 
 
 class Judge:
-    def __init__(self, client: OpenAI | None = None):
+    def __init__(self, client: OpenAI | None = None,
+                 model: str = DEFAULT_JUDGE_MODEL):
         self._client = client or OpenAI()
+        self._model = model
 
-    def score_submission(self, task: str, submission: Submission) -> dict:
+    def score_submission(self, task: str, submission: Submission,
+                         quality_criteria: list[str] | None = None) -> dict:
         """Score a single submission. Returns {score: int, feedback: str}.
 
-        On API error, returns a fallback score of 1 with error feedback.
+        If quality_criteria is provided, uses those instead of defaults.
         """
+        criteria = quality_criteria or DEFAULT_CRITERIA
+        system_prompt = _build_judge_prompt(criteria)
         work = _truncate(submission.work)
-        prompt = (
-            f"Task: {task}\n\n"
-            f"Submission (bid ${submission.bid:.4f}):\n"
-            f"{work}"
-        )
+        prompt = f"Task: {task}\n\nSubmission (bid ${submission.bid:.4f}):\n{work}"
+
         try:
             resp = self._client.chat.completions.create(
-                model=JUDGE_MODEL,
+                model=self._model,
                 max_tokens=256,
                 messages=[
-                    {"role": "system", "content": JUDGE_SYSTEM},
+                    {"role": "system", "content": system_prompt},
                     {"role": "user", "content": prompt},
                 ],
             )
@@ -118,11 +120,12 @@ class Judge:
             return {"score": 1, "feedback": f"Judge error: {e}"}
 
     def score_batch(self, task: str,
-                    submissions: dict[str, Submission]) -> dict[str, dict]:
-        """Score multiple submissions. Returns {agent_id: {score, feedback}}.
+                    submissions: dict[str, Submission],
+                    quality_criteria: list[str] | None = None) -> dict[str, dict]:
+        """Score multiple submissions. Returns {agent_id: {score, feedback}}."""
+        criteria = quality_criteria or DEFAULT_CRITERIA
+        system_prompt = _build_judge_prompt(criteria, batch=True)
 
-        On API error, returns fallback scores for all agents.
-        """
         parts = [f"Task: {task}\n"]
         for agent_id, sub in submissions.items():
             work = _truncate(sub.work)
@@ -130,17 +133,16 @@ class Judge:
 
         try:
             resp = self._client.chat.completions.create(
-                model=JUDGE_MODEL,
+                model=self._model,
                 max_tokens=1024,
                 messages=[
-                    {"role": "system", "content": BATCH_JUDGE_SYSTEM},
+                    {"role": "system", "content": system_prompt},
                     {"role": "user", "content": "\n".join(parts)},
                 ],
             )
             result = parse_json(resp.choices[0].message.content)
             scores = result.get("scores", result)
 
-            # Validate each agent's score
             validated = {}
             for agent_id in submissions:
                 if agent_id in scores and isinstance(scores[agent_id], dict):

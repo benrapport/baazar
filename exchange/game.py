@@ -22,10 +22,7 @@ from exchange.types import GameState, RegisteredAgent, Submission
 
 logger = logging.getLogger(__name__)
 
-MAX_REVISIONS = 3
 HARD_TIMEOUT = 60.0
-MIN_TIMEOUT = 1.0
-MAX_TIMEOUT = 300.0
 CHECK_INTERVAL = 0.05  # 50ms
 
 
@@ -39,6 +36,7 @@ async def run_game(
     judge: Judge,
     ledger: Ledger,
     timeout: float = HARD_TIMEOUT,
+    quality_criteria: list[str] | None = None,
     state: GameState | None = None,
 ) -> ExchangeResult:
     """Run a full game for one buyer request."""
@@ -46,7 +44,7 @@ async def run_game(
     if max_price <= 0:
         raise ValueError("max_price must be positive")
     min_quality = max(1, min(10, min_quality))
-    timeout = max(MIN_TIMEOUT, min(MAX_TIMEOUT, timeout))
+    timeout = max(1.0, timeout)
 
     agents = registry.get_agents_for_capability(capability)
     if not agents:
@@ -59,6 +57,7 @@ async def run_game(
             input=input_text,
             max_price=max_price,
             min_quality=min_quality,
+            quality_criteria=quality_criteria or [],
             buyer_id=buyer_id,
             timeout=timeout,
         )
@@ -72,6 +71,7 @@ async def run_game(
         input=input_text,
         max_price=max_price,
         min_quality=min_quality,
+        quality_criteria=quality_criteria or [],
         deadline_unix=deadline,
     )
 
@@ -159,8 +159,9 @@ async def _wait_for_winner(state: GameState, judge: Judge,
         """Score a submission. Only writes score — does NOT pick winner."""
         try:
             loop = asyncio.get_event_loop()
+            criteria = state.quality_criteria or None
             result = await loop.run_in_executor(
-                None, judge.score_submission, state.input, sub
+                None, judge.score_submission, state.input, sub, criteria
             )
             with state.lock:
                 if agent_id in state.submissions:
@@ -298,9 +299,6 @@ def receive_submission(state: GameState, agent_id: str,
             return False
 
         existing = state.submissions.get(agent_id)
-        if existing and existing.revision >= state.max_revisions:
-            return False
-
         revision = (existing.revision + 1) if existing else 0
 
         state.submissions[agent_id] = Submission(

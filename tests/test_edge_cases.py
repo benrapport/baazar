@@ -518,14 +518,13 @@ class TestReceiveSubmission:
         assert state.submissions["a1"].revision == 1
         assert state.submissions["a1"].work == "v2"
 
-    def test_max_revisions_enforced(self):
-        state = _make_state(max_revisions=2)
-        receive_submission(state, "a1", 3.0, "v0")  # rev 0
-        receive_submission(state, "a1", 3.0, "v1")  # rev 1
-        receive_submission(state, "a1", 3.0, "v2")  # rev 2
-        # revision 2 == max_revisions, so next should be rejected
-        assert receive_submission(state, "a1", 3.0, "v3") is False
-        assert state.submissions["a1"].work == "v2"
+    def test_unlimited_revisions(self):
+        """No cap on revisions — deadline is the natural constraint."""
+        state = _make_state()
+        for i in range(20):
+            assert receive_submission(state, "a1", 3.0, f"v{i}") is True
+        assert state.submissions["a1"].revision == 19
+        assert state.submissions["a1"].work == "v19"
 
     def test_multiple_agents_submit(self):
         state = _make_state()

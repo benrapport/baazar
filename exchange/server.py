@@ -70,6 +70,7 @@ async def call_exchange(
         input=req.input,
         max_price=req.max_price,
         min_quality=req.min_quality,
+        quality_criteria=req.quality_criteria,
         buyer_id=buyer_id,
     )
     with _games_lock:
@@ -86,6 +87,7 @@ async def call_exchange(
             judge=_get_judge(),
             ledger=ledger,
             timeout=req.timeout,
+            quality_criteria=req.quality_criteria,
             state=state,
         )
     except ValueError as e:
@@ -107,7 +109,6 @@ async def register_agent(reg: AgentRegistration):
     agent = registry.register(
         agent_id=reg.agent_id,
         capabilities=reg.capabilities,
-        callback_url=reg.callback_url,
     )
     logger.info(f"Registered agent: {agent.agent_id} ({reg.capabilities})")
     return {"status": "registered", "agent_id": agent.agent_id}
@@ -149,7 +150,7 @@ async def get_feedback(request_id: str, agent_id: str):
         "status": "feedback",
         "score": sub.score,
         "feedback": sub.feedback,
-        "can_revise": sub.revision < state.max_revisions,
+        "can_revise": not state.done,
     }
 
 

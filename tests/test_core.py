@@ -33,7 +33,7 @@ def test_game_state():
                   max_price=5.0, min_quality=7, buyer_id="b1")
     assert g.winner is None
     assert g.done is False
-    assert g.max_revisions == 3
+    assert g.quality_criteria == []
 
 
 # ── Registry ──────────────────────────────────────────────────────────

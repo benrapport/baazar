@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class RegisteredAgent(BaseModel):
     agent_id: str
     capabilities: list[str]
-    callback_url: str
+    callback_url: str = ""  # optional — empty if agent uses WebSocket/poll
     status: str = "active"
     registered_at: float = Field(default_factory=time.time)
 
@@ -49,11 +49,11 @@ class GameState(BaseModel):
     input: str
     max_price: float  # USD
     min_quality: int
+    quality_criteria: list[str] = []  # buyer-defined scoring criteria
     buyer_id: str
     start_time: float = Field(default_factory=time.time)
-    submissions: dict[str, Submission] = {}  # agent_id -> latest submission
+    submissions: dict[str, Submission] = {}
     winner: str | None = None
     done: bool = False
-    max_revisions: int = 3
     timeout: float = 60.0
     lock: threading.Lock = Field(default_factory=threading.Lock, exclude=True)
