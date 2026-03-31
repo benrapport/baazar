@@ -46,6 +46,8 @@ def main():
     print("  POST /submit/{{id}}   — agent submits work")
     print("  GET  /feedback/{{id}} — agent polls for score")
     print("  GET  /status         — exchange stats")
+    print("  GET  /markets        — list completed market logs")
+    print("  GET  /markets/{{id}} — full event log for a market")
     print()
 
     uvicorn.run(

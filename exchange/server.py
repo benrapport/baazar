@@ -15,6 +15,7 @@ from bazaar.types import (
 )
 from exchange.game import receive_submission, run_game
 from exchange.judge import Judge
+from exchange.market_log import MarketLogStore
 from exchange.registry import Registry
 from exchange.settlement import Ledger
 from exchange.types import GameState
@@ -27,6 +28,7 @@ app = FastAPI(title="Bazaar Exchange", version="0.1.0")
 # Singletons — lazy init for OpenAI client (env may not be loaded at import)
 registry = Registry()
 ledger = Ledger()
+market_log_store = MarketLogStore()
 active_games: dict[str, GameState] = {}
 _games_lock = threading.Lock()
 _judge: Judge | None = None
@@ -37,6 +39,12 @@ def _get_judge() -> Judge:
     if _judge is None:
         _judge = Judge(client=OpenAI())
     return _judge
+
+
+def configure_market_log_path(path: str):
+    """Set the JSONL output path for market logs. Called before server starts."""
+    global market_log_store
+    market_log_store = MarketLogStore(output_path=path)
 
 
 # Simple API key auth (demo mode: "demo" key always works)
@@ -91,6 +99,7 @@ async def call_exchange(
             quality_criteria=exc.judge.criteria,
             state=state,
             llm_config=llm,
+            market_log_store=market_log_store,
         )
     except ValueError as e:
         raise HTTPException(404, str(e))
@@ -156,6 +165,34 @@ async def get_feedback(request_id: str, agent_id: str):
     }
 
 
+# ── Market log endpoints ─────────────────────────────────────────────
+
+@app.get("/markets")
+async def list_markets():
+    """List all completed market logs."""
+    logs = market_log_store.get_all()
+    return [
+        {
+            "request_id": log.request_id,
+            "winner": log.winner,
+            "agents_invited": log.agents_invited,
+            "num_events": len(log.events),
+            "opened_at": log.opened_at,
+            "closed_at": log.closed_at,
+        }
+        for log in logs
+    ]
+
+
+@app.get("/markets/{request_id}")
+async def get_market(request_id: str):
+    """Get full market log for a request."""
+    log = market_log_store.get(request_id)
+    if not log:
+        raise HTTPException(404, f"No market log for {request_id}")
+    return log.to_dict()
+
+
 # ── Status endpoint ───────────────────────────────────────────────────
 
 @app.get("/status")
@@ -165,5 +202,6 @@ async def exchange_status():
     return {
         "agents_registered": registry.count,
         "active_games": len(active_games),
+        "completed_markets": len(market_log_store.get_all()),
         **totals,
     }

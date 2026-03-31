@@ -88,13 +88,17 @@ class SimulationRunner:
             results_file = writer.close()
             logger.info(f"Results written to {results_file}")
 
-            # 6. Generate and save summary
+            # 6. Fetch market logs from exchange
+            logger.info("Fetching market logs from exchange...")
+            await self._fetch_market_logs()
+
+            # 7. Generate and save summary
             logger.info("Generating summary...")
             summary = generate_summary(results)
             summary_file = save_summary(summary, output_dir=self.output_dir)
             logger.info(f"Summary written to {summary_file}")
 
-            # 7. Print results
+            # 8. Print results
             self._print_results(summary, results)
 
             return summary
@@ -174,11 +178,17 @@ class SimulationRunner:
     async def _call_exchange(self, client: httpx.AsyncClient, task: Task) -> TaskResult:
         """Single /call request to exchange. Returns TaskResult."""
         request_body = {
-            "input": task.input,
-            "max_price": task.max_price,
-            "min_quality": task.min_quality,
-            "timeout": task.timeout,
-            "quality_criteria": task.quality_criteria,
+            "llm": {
+                "input": task.input,
+            },
+            "exchange": {
+                "max_price": task.max_price,
+                "judge": {
+                    "min_quality": task.min_quality,
+                    "criteria": task.quality_criteria,
+                },
+                "timeout": task.timeout,
+            },
         }
 
         try:
@@ -231,6 +241,40 @@ class SimulationRunner:
                 difficulty=task.difficulty,
                 error=f"Exception: {type(e).__name__}: {e}",
             )
+
+    async def _fetch_market_logs(self):
+        """Fetch all market logs from the exchange and write to JSONL."""
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                # Get list of markets
+                resp = await client.get(f"{self.exchange_url}/markets")
+                if resp.status_code != 200:
+                    logger.warning(f"Failed to fetch market list: {resp.status_code}")
+                    return
+
+                markets = resp.json()
+                if not markets:
+                    logger.info("No market logs to fetch")
+                    return
+
+                # Fetch full log for each market
+                output_path = Path(self.output_dir)
+                timestamp = int(time.time())
+                markets_file = output_path / f"markets_{timestamp}.jsonl"
+
+                with open(markets_file, "w") as f:
+                    for market_summary in markets:
+                        rid = market_summary["request_id"]
+                        detail_resp = await client.get(
+                            f"{self.exchange_url}/markets/{rid}"
+                        )
+                        if detail_resp.status_code == 200:
+                            f.write(json.dumps(detail_resp.json()) + "\n")
+
+                logger.info(f"Market logs written to {markets_file} ({len(markets)} markets)")
+
+        except Exception as e:
+            logger.warning(f"Failed to fetch market logs: {e}")
 
     def _print_results(self, summary: dict, results: list[TaskResult]):
         """Print leaderboard and stats."""
