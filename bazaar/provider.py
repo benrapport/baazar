@@ -73,10 +73,9 @@ class AgentProvider:
                 return {"status": "no_handler"}
 
             # Run handler (may be slow — do it in a thread)
-            loop = asyncio.get_event_loop()
             try:
-                result = await loop.run_in_executor(
-                    None, self._handler, payload.model_dump()
+                result = await asyncio.to_thread(
+                    self._handler, payload.model_dump()
                 )
             except Exception as e:
                 logger.error(f"Handler error: {e}")

@@ -103,6 +103,7 @@ class BroadcastPayload(BaseModel):
     response_format: dict | None = None
     max_tokens: int | None = None
     temperature: float | None = None
+    top_p: float | None = None
     max_price: float  # USD
     min_quality: int
     quality_criteria: list[str] = []

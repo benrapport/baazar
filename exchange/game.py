@@ -14,7 +14,7 @@ import uuid
 
 import httpx
 
-from bazaar.types import BroadcastPayload, ExchangeResult
+from bazaar.types import BroadcastPayload, ExchangeResult, LLMConfig
 from exchange.judge import Judge
 from exchange.registry import Registry
 from exchange.settlement import Ledger
@@ -37,6 +37,7 @@ async def run_game(
     timeout: float = HARD_TIMEOUT,
     quality_criteria: list[str] | None = None,
     state: GameState | None = None,
+    llm_config: LLMConfig | None = None,
 ) -> ExchangeResult:
     """Run a full game for one buyer request."""
 
@@ -63,9 +64,16 @@ async def run_game(
     request_id = state.request_id
     deadline = state.start_time + timeout
 
+    llm = llm_config
     payload = BroadcastPayload(
         request_id=request_id,
         input=input_text,
+        instructions=llm.instructions if llm else "",
+        attachments=llm.attachments if llm else [],
+        response_format=llm.response_format if llm else None,
+        max_tokens=llm.max_tokens if llm else None,
+        temperature=llm.temperature if llm else None,
+        top_p=llm.top_p if llm else None,
         max_price=max_price,
         min_quality=min_quality,
         quality_criteria=quality_criteria or [],
@@ -154,10 +162,9 @@ async def _wait_for_winner(state: GameState, judge: Judge,
     async def _score_one(agent_id: str, sub: Submission):
         """Score a submission. Only writes score — does NOT pick winner."""
         try:
-            loop = asyncio.get_event_loop()
             criteria = state.quality_criteria or None
-            result = await loop.run_in_executor(
-                None, judge.score_submission, state.input, sub, criteria
+            result = await asyncio.to_thread(
+                judge.score_submission, state.input, sub, criteria
             )
             with state.lock:
                 if agent_id in state.submissions:

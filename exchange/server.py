@@ -44,10 +44,10 @@ VALID_API_KEYS = {"demo", os.environ.get("BAZAAR_API_KEY", "demo")}
 
 
 def _check_auth(authorization: str | None) -> str:
-    if not authorization:
-        raise HTTPException(401, "Missing Authorization header")
-    key = authorization.replace("Bearer ", "")
-    if key not in VALID_API_KEYS:
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(401, "Missing or malformed Authorization header")
+    key = authorization[7:]  # strip "Bearer " prefix
+    if not key or key not in VALID_API_KEYS:
         raise HTTPException(401, "Invalid API key")
     return key
 
@@ -90,6 +90,7 @@ async def call_exchange(
             timeout=exc.timeout,
             quality_criteria=exc.judge.criteria,
             state=state,
+            llm_config=llm,
         )
     except ValueError as e:
         raise HTTPException(404, str(e))
