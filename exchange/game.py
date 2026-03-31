@@ -204,7 +204,7 @@ async def _wait_for_winner(state: GameState, judge: Judge,
 
         if qualifiers:
             # Sort by bid (lowest), then timestamp (earliest)
-            qualifiers.sort(key=lambda x: (x[1].bid, x[1].timestamp))
+            qualifiers.sort(key=lambda x: x[1].timestamp)
             best_aid, best_sub = qualifiers[0]
 
             # Is there an unscored submission that arrived EARLIER than our best?
@@ -267,14 +267,11 @@ def _get_qualifiers(state: GameState) -> list[str]:
 
 def _select_winner(state: GameState,
                    qualifiers: list[str]) -> ExchangeResult:
-    """Pick lowest bid among qualifiers. Ties broken by timestamp."""
+    """Pick earliest-timestamped qualifier. First to arrive wins."""
     with state.lock:
         winner = min(
             qualifiers,
-            key=lambda aid: (
-                state.submissions[aid].bid,
-                state.submissions[aid].timestamp,
-            ),
+            key=lambda aid: state.submissions[aid].timestamp,
         )
         sub = state.submissions[winner]
         state.winner = winner

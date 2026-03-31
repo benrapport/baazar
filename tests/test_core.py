@@ -194,7 +194,7 @@ def test_get_qualifiers():
     qualifiers = _get_qualifiers(state)
     assert set(qualifiers) == {"a1", "a3"}
 
-def test_select_winner_picks_lowest_bid():
+def test_select_winner_picks_earliest_timestamp():
     from exchange.game import _select_winner
     from exchange.types import Submission
     state = GameState(request_id="r1", capability="ocr", input="img",
@@ -207,8 +207,8 @@ def test_select_winner_picks_lowest_bid():
         work="ok", score=7, timestamp=2.0)
 
     result = _select_winner(state, ["a1", "a3"])
-    assert result.agent_id == "a3"  # lowest bid
-    assert result.price == 1.0
+    assert result.agent_id == "a1"  # arrived first
+    assert result.price == 3.0
 
 
 if __name__ == "__main__":

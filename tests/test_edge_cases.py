@@ -611,7 +611,7 @@ class TestGetQualifiers:
 
 
 class TestSelectWinner:
-    def test_lowest_bid_wins(self):
+    def test_earliest_timestamp_wins(self):
         state = _make_state()
         state.submissions["a1"] = Submission(
             agent_id="a1", request_id="r1", bid=3.0,
@@ -620,7 +620,7 @@ class TestSelectWinner:
             agent_id="a2", request_id="r1", bid=1.0,
             work="ok", score=7, timestamp=2.0)
         result = _select_winner(state, ["a1", "a2"])
-        assert result.agent_id == "a2"
+        assert result.agent_id == "a1"  # arrived first
 
     def test_same_bid_earliest_timestamp_wins(self):
         state = _make_state()
