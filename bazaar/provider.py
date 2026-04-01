@@ -48,6 +48,7 @@ class AgentProvider:
         self.callback_url = f"http://{callback_host}:{callback_port}"
 
         self._handler: Callable | None = None
+        self._pending_tasks: set[asyncio.Task] = set()
         self._app = FastAPI(title=f"Agent: {agent_id}")
         self._setup_routes()
 
@@ -66,64 +67,67 @@ class AgentProvider:
     def _setup_routes(self):
         @self._app.post("/request")
         async def receive_request(payload: BroadcastPayload):
-            """Exchange broadcasts a request to us."""
+            """Exchange broadcasts a request to us. Respond immediately, solve in background."""
             logger.info(f"Received request {payload.request_id}")
             if not self._handler:
                 logger.warning("No handler registered")
                 return {"status": "no_handler"}
 
-            # Run handler (may be slow — do it in a thread)
-            try:
-                result = await asyncio.to_thread(
-                    self._handler, payload.model_dump()
-                )
-            except Exception as e:
-                logger.error(f"Handler error: {e}")
-                return {"status": "error", "detail": str(e)}
-
-            if result is None:
-                # Agent chose to pass
-                return {"status": "pass"}
-
-            bid = result.get("bid", 0)
-            work = result.get("work", "")
-
-            # POST submission back to exchange
-            sub = SubmissionPayload(
-                agent_id=self.agent_id,
-                request_id=payload.request_id,
-                bid=bid,
-                work=work,
-            )
-            try:
-                async with httpx.AsyncClient(timeout=5.0) as client:
-                    resp = await client.post(
-                        f"{self.exchange_url}/submit/{payload.request_id}",
-                        json=sub.model_dump(),
-                    )
-                    if resp.status_code == 404:
-                        logger.warning(
-                            f"Auction {payload.request_id} already closed "
-                            f"(agent too slow), bid=${bid:.4f}"
-                        )
-                    elif resp.status_code >= 400:
-                        logger.warning(
-                            f"Submission rejected for {payload.request_id}: "
-                            f"bid=${bid:.4f}, status={resp.status_code}"
-                        )
-                    else:
-                        logger.info(
-                            f"Submitted to {payload.request_id}: "
-                            f"bid=${bid:.4f}, accepted"
-                        )
-            except Exception as e:
-                logger.error(f"Failed to submit: {e}")
-
-            return {"status": "submitted"}
+            # Solve + submit in background, track task for cleanup
+            task = asyncio.create_task(self._solve_and_submit(payload))
+            self._pending_tasks.add(task)
+            task.add_done_callback(self._pending_tasks.discard)
+            return {"status": "accepted"}
 
         @self._app.get("/health")
         async def health():
             return {"agent_id": self.agent_id, "status": "ok"}
+
+    async def _solve_and_submit(self, payload: BroadcastPayload):
+        """Solve the task in a thread, then submit the result."""
+        try:
+            result = await asyncio.to_thread(
+                self._handler, payload.model_dump()
+            )
+        except Exception as e:
+            logger.error(f"Handler error: {e}")
+            return
+
+        if result is None:
+            return
+
+        bid = result.get("bid", 0)
+        work = result.get("work", "")
+
+        sub = SubmissionPayload(
+            agent_id=self.agent_id,
+            request_id=payload.request_id,
+            bid=bid,
+            work=work,
+        )
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(
+                    f"{self.exchange_url}/submit/{payload.request_id}",
+                    json=sub.model_dump(),
+                )
+                if resp.status_code == 404:
+                    logger.warning(
+                        f"Auction {payload.request_id} already closed "
+                        f"(agent too slow), bid=${bid:.4f}"
+                    )
+                elif resp.status_code >= 400:
+                    logger.warning(
+                        f"Submission rejected for {payload.request_id}: "
+                        f"bid=${bid:.4f}, status={resp.status_code}"
+                    )
+                else:
+                    logger.info(
+                        f"Submitted to {payload.request_id}: "
+                        f"bid=${bid:.4f}, accepted"
+                    )
+        except Exception as e:
+            logger.error(f"Failed to submit: {e}")
 
     def _register_with_exchange(self):
         """Register this agent with the exchange server."""

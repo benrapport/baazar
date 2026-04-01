@@ -1,6 +1,8 @@
 """FastAPI exchange server — the gateway."""
 
 from __future__ import annotations
+import asyncio
+import concurrent.futures
 import logging
 import os
 import threading
@@ -24,6 +26,20 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Bazaar Exchange", version="0.1.0")
+
+@app.on_event("startup")
+def _expand_thread_pool():
+    """Judge scoring is I/O bound (OpenAI API calls). Default pool ~16 threads
+    bottlenecks when many submissions arrive concurrently."""
+    pool = concurrent.futures.ThreadPoolExecutor(max_workers=64)
+    asyncio.get_event_loop().set_default_executor(pool)
+
+
+@app.on_event("shutdown")
+def _shutdown():
+    """Flush and close market log file handle."""
+    market_log_store.close()
+
 
 # Singletons — lazy init for OpenAI client (env may not be loaded at import)
 registry = Registry()

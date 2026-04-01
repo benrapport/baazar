@@ -264,40 +264,6 @@ class SimulationRunner:
                 error=f"Exception: {type(e).__name__}: {e}",
             )
 
-    async def _fetch_market_logs(self):
-        """Fetch all market logs from the exchange and write to JSONL."""
-        try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                # Get list of markets
-                resp = await client.get(f"{self.exchange_url}/markets")
-                if resp.status_code != 200:
-                    logger.warning(f"Failed to fetch market list: {resp.status_code}")
-                    return
-
-                markets = resp.json()
-                if not markets:
-                    logger.info("No market logs to fetch")
-                    return
-
-                # Fetch full log for each market
-                output_path = Path(self.output_dir)
-                timestamp = int(time.time())
-                markets_file = output_path / f"markets_{timestamp}.jsonl"
-
-                with open(markets_file, "w") as f:
-                    for market_summary in markets:
-                        rid = market_summary["request_id"]
-                        detail_resp = await client.get(
-                            f"{self.exchange_url}/markets/{rid}"
-                        )
-                        if detail_resp.status_code == 200:
-                            f.write(json.dumps(detail_resp.json()) + "\n")
-
-                logger.info(f"Market logs written to {markets_file} ({len(markets)} markets)")
-
-        except Exception as e:
-            logger.warning(f"Failed to fetch market logs: {e}")
-
     def _print_results(self, summary: dict, results: list[TaskResult]):
         """Print leaderboard and stats."""
         print("\n" + "=" * 80)
@@ -341,7 +307,23 @@ class SimulationRunner:
             print("=" * 80 + "\n")
 
 
+def _load_api_keys():
+    """Load API keys from ~/.config/keys/ and .env."""
+    key_path = Path.home() / ".config" / "keys" / "openai"
+    if key_path.exists():
+        os.environ.setdefault("OPENAI_API_KEY", key_path.read_text().strip())
+
+    env_path = Path(".env")
+    if env_path.exists():
+        for line in env_path.read_text().splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, _, v = line.partition("=")
+                os.environ.setdefault(k.strip(), v.strip())
+
+
 def main():
+    _load_api_keys()
     parser = argparse.ArgumentParser(description="Run exchange simulation")
     parser.add_argument("--tasks", type=int, default=1000, help="Number of tasks")
     parser.add_argument("--concurrent", type=int, default=50, help="Max concurrent requests")
