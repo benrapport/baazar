@@ -282,6 +282,132 @@ def render_exchange_dashboard(ts: dict, output_dir: str = "sim_results",
     return chart_path
 
 
+# ── Bucketed PnL dashboard ────────────────────────────────────────────
+
+def render_bucketed_dashboard(ts: dict, output_dir: str = "sim_results",
+                                buckets: int = 5, top_n: int = 15) -> Path:
+    """Render PnL at N evenly-spaced checkpoints, showing how agent
+    economics evolve over the course of the simulation."""
+
+    agent_curves = ts["agent_curves"]
+    num_markets = ts["num_markets"]
+
+    if not agent_curves or num_markets == 0:
+        print("No data to render.")
+        return None
+
+    # Determine top agents by final PnL magnitude (winners + losers)
+    final_pnl = {
+        aid: points[-1][1] if points else 0
+        for aid, points in agent_curves.items()
+    }
+    top_agents = sorted(final_pnl, key=lambda a: abs(final_pnl[a]), reverse=True)[:top_n]
+
+    # Bucket boundaries (market indices)
+    boundaries = [int(num_markets * (i + 1) / buckets) - 1 for i in range(buckets)]
+    bucket_labels = [f"Market {b+1}\n({int(100*(b+1)/num_markets)}%)" for b in boundaries]
+
+    # Sample PnL at each boundary for each agent
+    # agent_curves[aid] = [(market_idx, cumulative_pnl), ...]
+    def pnl_at(aid: str, market_idx: int) -> float:
+        points = agent_curves.get(aid, [])
+        if not points:
+            return 0.0
+        # Find the closest point at or before market_idx
+        val = 0.0
+        for idx, pnl in points:
+            if idx <= market_idx:
+                val = pnl
+            else:
+                break
+        return val
+
+    # Also sample buyer surplus at each bucket
+    def series_at(series: list[tuple[int, float]], market_idx: int) -> float:
+        val = 0.0
+        for idx, v in series:
+            if idx <= market_idx:
+                val = v
+            else:
+                break
+        return val
+
+    # ── Build figure: 2 rows ──────────────────────────────────────────
+    fig, axes = plt.subplots(2, 1, figsize=(18, 14), gridspec_kw={"height_ratios": [3, 1]})
+    fig.suptitle(f"Exchange PnL — {buckets} Time Buckets ({num_markets} markets)",
+                 fontsize=18, fontweight="bold", color="white")
+    fig.patch.set_facecolor("#0f0f23")
+
+    # ── Top: Agent PnL grouped bars at each bucket ────────────────────
+    ax1 = axes[0]
+    ax1.set_facecolor("#1a1a2e")
+
+    n_agents = len(top_agents)
+    bar_width = 0.8 / n_agents if n_agents > 0 else 0.1
+    x_base = np.arange(buckets)
+
+    # Sort agents by final PnL for consistent coloring
+    top_agents_sorted = sorted(top_agents, key=lambda a: final_pnl[a], reverse=True)
+
+    for i, aid in enumerate(top_agents_sorted):
+        values = [pnl_at(aid, b) for b in boundaries]
+        offset = (i - n_agents / 2) * bar_width + bar_width / 2
+        color = AGENT_COLORS[i % len(AGENT_COLORS)]
+        bars = ax1.bar(x_base + offset, values, bar_width, label=aid,
+                       color=color, alpha=0.85, edgecolor="none")
+
+    ax1.set_xticks(x_base)
+    ax1.set_xticklabels(bucket_labels, color="white", fontsize=10)
+    ax1.set_title("Agent Cumulative PnL at Each Checkpoint", color="white", fontsize=14, pad=10)
+    ax1.set_ylabel("Cumulative PnL (USD)", color="white", fontsize=11)
+    ax1.tick_params(colors="white")
+    ax1.yaxis.set_major_formatter(ticker.FormatStrFormatter("$%.3f"))
+    ax1.axhline(y=0, color="#555", linewidth=0.8, linestyle="--")
+    ax1.spines["bottom"].set_color("#333")
+    ax1.spines["left"].set_color("#333")
+    ax1.spines["top"].set_visible(False)
+    ax1.spines["right"].set_visible(False)
+    ax1.grid(True, alpha=0.1, color="white", axis="y")
+
+    # Legend outside the plot
+    ax1.legend(loc="upper left", fontsize=7, ncol=3,
+               facecolor="#1a1a2e", edgecolor="#333", labelcolor="white")
+
+    # ── Bottom: Buyer surplus + exchange fees at each bucket ──────────
+    ax2 = axes[1]
+    ax2.set_facecolor("#1a1a2e")
+
+    surplus_vals = [series_at(ts["buyer_surplus"], b) for b in boundaries]
+    spend_vals = [series_at(ts["buyer_spend"], b) for b in boundaries]
+    fee_vals = [series_at(ts["exchange_fees"], b) for b in boundaries]
+
+    width = 0.25
+    ax2.bar(x_base - width, surplus_vals, width, label="Buyer Surplus", color="#2ecc71", alpha=0.85)
+    ax2.bar(x_base, spend_vals, width, label="Buyer Spend", color="#e74c3c", alpha=0.85)
+    ax2.bar(x_base + width, fee_vals, width, label="Exchange Fees", color="#9b59b6", alpha=0.85)
+
+    ax2.set_xticks(x_base)
+    ax2.set_xticklabels(bucket_labels, color="white", fontsize=10)
+    ax2.set_title("Buyer Economics at Each Checkpoint", color="white", fontsize=14, pad=10)
+    ax2.set_ylabel("Cumulative USD", color="white", fontsize=11)
+    ax2.tick_params(colors="white")
+    ax2.yaxis.set_major_formatter(ticker.FormatStrFormatter("$%.3f"))
+    ax2.spines["bottom"].set_color("#333")
+    ax2.spines["left"].set_color("#333")
+    ax2.spines["top"].set_visible(False)
+    ax2.spines["right"].set_visible(False)
+    ax2.grid(True, alpha=0.1, color="white", axis="y")
+    ax2.legend(facecolor="#1a1a2e", edgecolor="#333", labelcolor="white", fontsize=9)
+
+    plt.tight_layout()
+
+    output_path = Path(output_dir)
+    chart_path = output_path / "bucketed_pnl.png"
+    fig.savefig(chart_path, dpi=150, bbox_inches="tight", facecolor=fig.get_facecolor())
+    plt.close(fig)
+    return chart_path
+
+
 # ── Main ──────────────────────────────────────────────────────────────
 
 def main():
@@ -290,6 +416,7 @@ def main():
     parser.add_argument("--summary", help="Summary JSON file")
     parser.add_argument("--dir", default="sim_results", help="Output directory")
     parser.add_argument("--top", type=int, default=0, help="Show only top N agents")
+    parser.add_argument("--buckets", type=int, default=5, help="Number of time buckets for bucketed view")
     args = parser.parse_args()
 
     markets_path = Path(args.markets) if args.markets else find_latest("markets_*.jsonl", args.dir)
@@ -314,10 +441,17 @@ def main():
     print(f"Agents with PnL curves: {len(ts['agent_curves'])}")
 
     chart_path = render_exchange_dashboard(ts, output_dir=args.dir, top_n=args.top)
-    print(f"\nDashboard saved to: {chart_path}")
+    print(f"Equity curves saved to: {chart_path}")
+
+    bucketed_path = render_bucketed_dashboard(ts, output_dir=args.dir, buckets=args.buckets,
+                                                top_n=args.top or 15)
+    if bucketed_path:
+        print(f"Bucketed PnL saved to: {bucketed_path}")
 
     import subprocess
     subprocess.Popen(["open", str(chart_path)])
+    if bucketed_path:
+        subprocess.Popen(["open", str(bucketed_path)])
 
 
 if __name__ == "__main__":
