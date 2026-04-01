@@ -341,7 +341,23 @@ class SimulationRunner:
             print("=" * 80 + "\n")
 
 
+def _load_api_keys():
+    """Load API keys from ~/.config/keys/ and .env."""
+    key_path = Path.home() / ".config" / "keys" / "openai"
+    if key_path.exists():
+        os.environ.setdefault("OPENAI_API_KEY", key_path.read_text().strip())
+
+    env_path = Path(".env")
+    if env_path.exists():
+        for line in env_path.read_text().splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, _, v = line.partition("=")
+                os.environ.setdefault(k.strip(), v.strip())
+
+
 def main():
+    _load_api_keys()
     parser = argparse.ArgumentParser(description="Run exchange simulation")
     parser.add_argument("--tasks", type=int, default=1000, help="Number of tasks")
     parser.add_argument("--concurrent", type=int, default=50, help="Max concurrent requests")
