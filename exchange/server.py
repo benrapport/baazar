@@ -35,6 +35,12 @@ def _expand_thread_pool():
     asyncio.get_event_loop().set_default_executor(pool)
 
 
+@app.on_event("shutdown")
+def _shutdown():
+    """Flush and close market log file handle."""
+    market_log_store.close()
+
+
 # Singletons — lazy init for OpenAI client (env may not be loaded at import)
 registry = Registry()
 ledger = Ledger()

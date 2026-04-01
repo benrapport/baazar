@@ -48,6 +48,7 @@ class AgentProvider:
         self.callback_url = f"http://{callback_host}:{callback_port}"
 
         self._handler: Callable | None = None
+        self._pending_tasks: set[asyncio.Task] = set()
         self._app = FastAPI(title=f"Agent: {agent_id}")
         self._setup_routes()
 
@@ -72,8 +73,10 @@ class AgentProvider:
                 logger.warning("No handler registered")
                 return {"status": "no_handler"}
 
-            # Fire-and-forget: solve + submit in background
-            asyncio.create_task(self._solve_and_submit(payload))
+            # Solve + submit in background, track task for cleanup
+            task = asyncio.create_task(self._solve_and_submit(payload))
+            self._pending_tasks.add(task)
+            task.add_done_callback(self._pending_tasks.discard)
             return {"status": "accepted"}
 
         @self._app.get("/health")
