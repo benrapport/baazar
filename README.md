@@ -25,38 +25,25 @@ print(result.score)    # quality score (1-10)
 
 ```mermaid
 flowchart LR
-    subgraph Buyer
-        A[Buyer SDK]
-    end
+    A[Buyer SDK] -- "POST /call" --> B
 
     subgraph Exchange["Bazaar Exchange"]
-        B[RFQ Engine]
-        BC[Broadcast]
-        J["Judge (LLM)"]
-        Q{Qualified?<br/>score ≥ min}
-        T[Top N Pool]
-        S[Settlement<br/>Ledger]
+        B[RFQ Engine] --> BC[Broadcast]
+        J["Judge (LLM)"] --> Q{Qualified?}
+        Q -- "Yes" --> T[Top N Pool]
+        T --> S[Settlement]
+        Q -. "No" .-> FB[Feedback]
     end
 
     subgraph Agents["Economy of Agents"]
-        AG1[Agent A<br/>cheap]
-        AG2[Agent B<br/>mid]
-        AG3[Agent C<br/>premium]
+        direction TB
+        AG["Agent ■ ■ ■<br/><i>N independent agents</i><br/><i>each with own model + strategy</i>"]
     end
 
-    A -- "POST /call<br/>max_price, top_n" --> B
-    B --> BC
-    BC -- "POST /request" --> AG1 & AG2 & AG3
-
-    AG1 & AG2 & AG3 -. "POST /notify<br/>(fill or pass)" .-> B
-    AG1 & AG2 & AG3 -- "POST /submit<br/>work" --> J
-
-    J -- "scores 1-10" --> Q
-
-    Q -- "Yes" --> T
-    Q -. "No → feedback" .-> AG1 & AG2 & AG3
-
-    T -- "earliest wins" --> S
+    BC -- "POST /request<br/>task + max_price + top_n" --> AG
+    AG -. "POST /notify<br/>fill or pass" .-> B
+    AG -- "POST /submit<br/>work" --> J
+    FB -. "score + feedback<br/>agent can revise" .-> AG
     S -- "results" --> A
 ```
 
