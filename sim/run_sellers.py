@@ -9,9 +9,9 @@ Terminal 2:
 Each agent:
   1. Registers with the exchange
   2. Listens for task broadcasts
-  3. Assesses difficulty, decides bid
+  3. Assesses difficulty, decides fill/pass
   4. Solves task via multi-turn tool-calling loop (Claude Code pattern)
-  5. Submits {bid, work} back to exchange
+  5. Submits {work} back to exchange
 """
 
 import os

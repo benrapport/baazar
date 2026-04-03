@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from agent.runtime import ClaudeCodeAgent, AgentConfig
 from bazaar.provider import AgentProvider
 from constants.models import Model
-from sim.strategy import assess_difficulty, compute_bid
+from sim.strategy import assess_difficulty, should_fill
 
 logger = logging.getLogger(__name__)
 
@@ -24,14 +24,14 @@ class FleetMember:
 
 # ── Fleet generation ──────────────────────────────────────────────────
 
-# Strategy archetypes: (name_suffix, bid_aggression, system_prompt_flavor)
-# bid_aggression: 0.0 = bid at minimum, 1.0 = bid at maximum
+# Strategy archetypes: (name_suffix, min_margin, system_prompt_flavor)
+# min_margin: how much profit margin required to fill (lower = more aggressive)
 STRATEGIES = [
-    ("agg", 0.8, "Be aggressive. Bid high, deliver fast. Speed wins."),
-    ("bal", 0.5, "Balance cost and quality. Bid moderately."),
-    ("con", 0.2, "Be conservative. Bid low, win on price."),
-    ("sniper", 0.1, "Undercut everyone. Bid as low as possible to win on price alone."),
-    ("premium", 0.9, "Premium quality. Charge what you're worth."),
+    ("agg", 0.1, "Be aggressive. Fill fast, accept thin margins. Speed wins."),
+    ("bal", 0.5, "Balance cost and quality. Fill at reasonable margins."),
+    ("con", 1.5, "Be conservative. Only fill when margins are large."),
+    ("sniper", 0.05, "Fill everything you can. Accept razor-thin margins."),
+    ("premium", 2.0, "Premium quality. Only fill high-margin tasks."),
 ]
 
 # Model tiers for fleet composition
@@ -72,7 +72,7 @@ def generate_fleet(size: int = 50, base_port: int = 9001) -> list[FleetMember]:
     members = []
     for i in range(size):
         model = model_pool[i % len(model_pool)]
-        strategy_name, aggression, prompt_flavor = STRATEGIES[i % len(STRATEGIES)]
+        strategy_name, min_margin, prompt_flavor = STRATEGIES[i % len(STRATEGIES)]
         model_name = MODEL_SHORT_NAMES[model]
         max_turns = MODEL_TURNS[model]
 
@@ -88,7 +88,7 @@ def generate_fleet(size: int = 50, base_port: int = 9001) -> list[FleetMember]:
                 model=model,
                 system_prompt=system_prompt,
                 max_turns=max_turns,
-                bid_aggression=aggression,
+                min_margin=min_margin,
             ),
             port=base_port + i,
         ))
@@ -122,7 +122,7 @@ class Fleet:
             self._agents[member.agent_id] = agent
 
             def make_handler(agent_id: str, agent: ClaudeCodeAgent, config: AgentConfig):
-                aggression = getattr(config, 'bid_aggression', 0.5)
+                margin = getattr(config, 'min_margin', 0.5)
 
                 def handler(request: dict) -> dict | None:
                     """Handler for AgentProvider. Receives payload.model_dump() dict."""
@@ -134,25 +134,24 @@ class Fleet:
                         # Assess task difficulty
                         difficulty_info = assess_difficulty(task_input)
 
-                        # Compute bid (with aggression override)
-                        bid = compute_bid(
+                        # Decide fill/pass
+                        fill = should_fill(
                             difficulty=difficulty_info,
                             max_price=max_price,
                             model=config.model,
                             budget_remaining_cents=agent.budget_remaining_cents,
-                            aggression=aggression,
+                            min_margin=margin,
                         )
 
-                        # If bid is None, we pass on this task
-                        if bid is None:
+                        if not fill:
                             return None
 
                         # Solve the task with deadline
-                        logger.info(f"{agent_id} competing with bid=${bid:.4f}")
+                        logger.info(f"{agent_id} filling at max_price=${max_price:.4f}")
                         deadline = deadline_unix if deadline_unix > 0 else None
                         work = agent.solve(task_input, deadline=deadline)
 
-                        return {"bid": bid, "work": work}
+                        return {"work": work}
                     except Exception as e:
                         logger.error(f"{agent_id} handler error: {e}", exc_info=True)
                         return None

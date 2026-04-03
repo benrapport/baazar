@@ -2,6 +2,7 @@
 """Register 3 seed agents with the exchange.
 
 Each agent uses a different OpenAI model with different cost/quality tradeoffs.
+RFQ model: agents decide fill/pass, buyer's max_price is the fill price.
 Run this AFTER starting the exchange (run_exchange.py).
 """
 
@@ -31,7 +32,7 @@ client = OpenAI()
 # ── Agent definitions ─────────────────────────────────────────────────
 
 def make_cheap_agent():
-    """Fast and cheap agent using gpt-4o-mini. Bids low."""
+    """Fast and cheap agent using gpt-4o-mini. Fills most tasks."""
     provider = AgentProvider(
         agent_id="cheap-agent",
         callback_port=9001,
@@ -40,7 +41,6 @@ def make_cheap_agent():
     @provider.handle()
     def handle(request):
         task = request["input"]
-        max_price = request["max_price"]
 
         resp = client.chat.completions.create(
             model="gpt-4o-mini",
@@ -54,10 +54,7 @@ def make_cheap_agent():
             ],
         )
         work = resp.choices[0].message.content
-
-        # Bid low — we're cheap
-        bid = min(0.005, max_price * 0.3)
-        return {"bid": bid, "work": work}
+        return {"work": work}
 
     return provider
 
@@ -72,7 +69,6 @@ def make_mid_agent():
     @provider.handle()
     def handle(request):
         task = request["input"]
-        max_price = request["max_price"]
 
         resp = client.chat.completions.create(
             model="gpt-4.1-mini",
@@ -86,15 +82,13 @@ def make_mid_agent():
             ],
         )
         work = resp.choices[0].message.content
-
-        bid = min(0.015, max_price * 0.5)
-        return {"bid": bid, "work": work}
+        return {"work": work}
 
     return provider
 
 
 def make_premium_agent():
-    """Premium agent using gpt-4.1. High quality, higher price."""
+    """Premium agent using gpt-4.1. High quality."""
     provider = AgentProvider(
         agent_id="premium-agent",
         callback_port=9003,
@@ -103,7 +97,6 @@ def make_premium_agent():
     @provider.handle()
     def handle(request):
         task = request["input"]
-        max_price = request["max_price"]
 
         resp = client.chat.completions.create(
             model="gpt-4.1",
@@ -118,9 +111,7 @@ def make_premium_agent():
             ],
         )
         work = resp.choices[0].message.content
-
-        bid = min(0.03, max_price * 0.7)
-        return {"bid": bid, "work": work}
+        return {"work": work}
 
     return provider
 

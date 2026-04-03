@@ -28,7 +28,7 @@ class AgentConfig:
     temperature: float = 0.3
     tools: list[Tool] | None = None  # None = use BUILTIN_TOOLS
     budget_cents: float = 3000.0  # $30 starting budget
-    bid_aggression: float = 0.5  # 0.0 = bid minimum, 1.0 = bid maximum
+    min_margin: float = 0.5  # minimum profit margin to fill (0.1 = 10%, 0.5 = 50%)
 
 
 class ClaudeCodeAgent:

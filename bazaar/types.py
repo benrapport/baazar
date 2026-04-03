@@ -84,7 +84,6 @@ class SubmissionPayload(BaseModel):
     """What an agent POSTs back to the exchange with its work."""
     agent_id: str = Field(..., min_length=1)
     request_id: str = Field(..., min_length=1)
-    bid: float = Field(..., ge=0)  # USD
     work: str
 
 

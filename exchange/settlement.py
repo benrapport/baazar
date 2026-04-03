@@ -4,14 +4,12 @@ from __future__ import annotations
 import threading
 from exchange.types import Transaction
 
-EXCHANGE_FEE_RATE = 0.20
-EXCHANGE_FEE_CAP = 0.01  # $0.01 cap
+EXCHANGE_FEE_RATE = 0.015  # 1.5% of fill price
 
 
-def calc_exchange_fee(buyer_ask: float, agent_price: float) -> float:
-    """20% of spread, capped at $0.01."""
-    spread = max(0, buyer_ask - agent_price)
-    return min(EXCHANGE_FEE_RATE * spread, EXCHANGE_FEE_CAP)
+def calc_exchange_fee(fill_price: float) -> float:
+    """1.5% of fill price (flat fee)."""
+    return EXCHANGE_FEE_RATE * max(0, fill_price)
 
 
 class Ledger:
@@ -20,9 +18,9 @@ class Ledger:
         self._lock = threading.Lock()
 
     def record(self, request_id: str, buyer_id: str, agent_id: str,
-               price: float, buyer_ask: float,
+               price: float,
                score: int | None, latency_ms: float) -> Transaction:
-        fee = calc_exchange_fee(buyer_ask, price)
+        fee = calc_exchange_fee(price)
         tx = Transaction(
             request_id=request_id,
             buyer_id=buyer_id,

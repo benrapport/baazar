@@ -99,7 +99,7 @@ class Judge:
         criteria = quality_criteria or DEFAULT_CRITERIA
         system_prompt = _build_judge_prompt(criteria)
         work = _truncate(submission.work)
-        prompt = f"Task: {task}\n\nSubmission (bid ${submission.bid:.4f}):\n{work}"
+        prompt = f"Task: {task}\n\nSubmission:\n{work}"
 
         try:
             resp = self._client.chat.completions.create(
@@ -129,7 +129,7 @@ class Judge:
         parts = [f"Task: {task}\n"]
         for agent_id, sub in submissions.items():
             work = _truncate(sub.work)
-            parts.append(f"## {agent_id} (bid ${sub.bid:.4f})\n{work}\n")
+            parts.append(f"## {agent_id}\n{work}\n")
 
         try:
             resp = self._client.chat.completions.create(

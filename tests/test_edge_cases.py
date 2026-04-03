@@ -245,7 +245,7 @@ class TestJudge:
     def test_normal_score(self):
         judge = self._mock_judge('{"score": 8, "feedback": "Good work"}')
         sub = Submission(agent_id="a1", request_id="r1",
-                         bid=1.0, work="2+2=4")
+                         work="2+2=4")
         result = judge.score_submission("What is 2+2?", sub)
         assert result["score"] == 8
         assert result["feedback"] == "Good work"
@@ -253,21 +253,21 @@ class TestJudge:
     def test_score_out_of_range_clamped(self):
         judge = self._mock_judge('{"score": 15, "feedback": "wow"}')
         sub = Submission(agent_id="a1", request_id="r1",
-                         bid=1.0, work="answer")
+                         work="answer")
         result = judge.score_submission("task", sub)
         assert result["score"] == 10  # clamped
 
     def test_score_null_returns_1(self):
         judge = self._mock_judge('{"score": null, "feedback": "bad"}')
         sub = Submission(agent_id="a1", request_id="r1",
-                         bid=1.0, work="answer")
+                         work="answer")
         result = judge.score_submission("task", sub)
         assert result["score"] == 1
 
     def test_malformed_json_returns_fallback(self):
         judge = self._mock_judge("not json at all")
         sub = Submission(agent_id="a1", request_id="r1",
-                         bid=1.0, work="answer")
+                         work="answer")
         result = judge.score_submission("task", sub)
         assert result["score"] == 1
         assert "error" in result["feedback"].lower() or "Judge" in result["feedback"]
@@ -277,7 +277,7 @@ class TestJudge:
         client.chat.completions.create.side_effect = TimeoutError("timeout")
         judge = Judge(client=client)
         sub = Submission(agent_id="a1", request_id="r1",
-                         bid=1.0, work="answer")
+                         work="answer")
         result = judge.score_submission("task", sub)
         assert result["score"] == 1
         assert "error" in result["feedback"].lower() or "timeout" in result["feedback"].lower()
@@ -287,14 +287,14 @@ class TestJudge:
         client.chat.completions.create.side_effect = RuntimeError("API down")
         judge = Judge(client=client)
         sub = Submission(agent_id="a1", request_id="r1",
-                         bid=1.0, work="answer")
+                         work="answer")
         result = judge.score_submission("task", sub)
         assert result["score"] == 1
 
     def test_empty_work_string(self):
         judge = self._mock_judge('{"score": 2, "feedback": "Empty submission"}')
         sub = Submission(agent_id="a1", request_id="r1",
-                         bid=1.0, work="")
+                         work="")
         result = judge.score_submission("task", sub)
         assert result["score"] == 2
 
@@ -309,7 +309,7 @@ class TestJudge:
 
         long_work = "x" * 100_000
         sub = Submission(agent_id="a1", request_id="r1",
-                         bid=1.0, work=long_work)
+                         work=long_work)
         judge.score_submission("task", sub)
 
         # Check the prompt sent to the LLM was truncated
@@ -321,7 +321,7 @@ class TestJudge:
     def test_score_exactly_at_threshold(self):
         judge = self._mock_judge('{"score": 7, "feedback": "Meets threshold"}')
         sub = Submission(agent_id="a1", request_id="r1",
-                         bid=1.0, work="answer")
+                         work="answer")
         result = judge.score_submission("task", sub)
         assert result["score"] == 7
 
@@ -332,9 +332,9 @@ class TestJudge:
         )
         subs = {
             "a1": Submission(agent_id="a1", request_id="r1",
-                             bid=1.0, work="good"),
+                             work="good"),
             "a2": Submission(agent_id="a2", request_id="r1",
-                             bid=0.5, work="bad"),
+                             work="bad"),
         }
         result = judge.score_batch("task", subs)
         assert result["a1"]["score"] == 8
@@ -347,9 +347,9 @@ class TestJudge:
         )
         subs = {
             "a1": Submission(agent_id="a1", request_id="r1",
-                             bid=1.0, work="good"),
+                             work="good"),
             "a2": Submission(agent_id="a2", request_id="r1",
-                             bid=0.5, work="bad"),
+                             work="bad"),
         }
         result = judge.score_batch("task", subs)
         assert result["a1"]["score"] == 8
@@ -361,7 +361,7 @@ class TestJudge:
         judge = Judge(client=client)
         subs = {
             "a1": Submission(agent_id="a1", request_id="r1",
-                             bid=1.0, work="x"),
+                             work="x"),
         }
         result = judge.score_batch("task", subs)
         assert result["a1"]["score"] == 1
@@ -372,49 +372,49 @@ class TestJudge:
 # ═══════════════════════════════════════════════════════════════════════
 
 class TestSettlement:
-    def test_exchange_fee_normal(self):
-        # 20% of (0.10 - 0.06) = 20% of 0.04 = 0.008
-        assert abs(calc_exchange_fee(0.10, 0.06) - 0.008) < 0.0001
+    def test_exchange_fee_flat_1_5_percent(self):
+        # 1.5% of $0.10 = $0.0015
+        assert abs(calc_exchange_fee(0.10) - 0.0015) < 0.00001
 
-    def test_exchange_fee_capped_at_1_cent(self):
-        # 20% of (1.00 - 0.02) = 0.196, capped at $0.01
-        assert abs(calc_exchange_fee(1.00, 0.02) - 0.01) < 0.0001
+    def test_exchange_fee_scales_linearly(self):
+        # 1.5% of $1.00 = $0.015
+        assert abs(calc_exchange_fee(1.00) - 0.015) < 0.00001
 
-    def test_exchange_fee_zero_spread(self):
-        assert calc_exchange_fee(0.05, 0.05) == 0.0
+    def test_exchange_fee_zero_price(self):
+        assert calc_exchange_fee(0.0) == 0.0
 
-    def test_exchange_fee_negative_spread_defended(self):
-        """Agent bids higher than max (shouldn't happen, but defend)."""
-        assert calc_exchange_fee(0.03, 0.05) == 0.0
+    def test_exchange_fee_negative_price_defended(self):
+        """Negative price should return 0."""
+        assert calc_exchange_fee(-1.0) == 0.0
 
-    def test_exchange_fee_very_small_spread(self):
-        fee = calc_exchange_fee(0.01001, 0.01)
-        assert fee == pytest.approx(0.000002, abs=0.000001)
+    def test_exchange_fee_very_small_price(self):
+        fee = calc_exchange_fee(0.001)
+        assert fee == pytest.approx(0.000015, abs=0.000001)
 
-    def test_exchange_fee_very_large(self):
-        fee = calc_exchange_fee(999.0, 0.0)
-        assert fee == 0.01  # capped at $0.01
+    def test_exchange_fee_very_large_price(self):
+        fee = calc_exchange_fee(999.0)
+        assert fee == pytest.approx(14.985, abs=0.001)  # 1.5% of $999, no cap
 
     def test_ledger_record_and_query(self):
         ledger = Ledger()
-        tx = ledger.record("r1", "b1", "a1", 0.03, 0.05, 8, 200)
-        assert tx.price == 0.03
-        assert abs(tx.exchange_fee - 0.004) < 0.0001  # 20% of $0.02
-        assert abs(tx.buyer_charged - 0.034) < 0.0001
+        tx = ledger.record("r1", "b1", "a1", 0.05, 8, 200)
+        assert tx.price == 0.05
+        assert abs(tx.exchange_fee - 0.00075) < 0.00001  # 1.5% of $0.05
+        assert abs(tx.buyer_charged - 0.05075) < 0.00001
         assert tx.tx_id.startswith("tx_")
 
     def test_ledger_query_by_buyer(self):
         ledger = Ledger()
-        ledger.record("r1", "b1", "a1", 3.0, 5.0, 8, 200)
-        ledger.record("r2", "b2", "a2", 2.0, 5.0, 7, 300)
+        ledger.record("r1", "b1", "a1", 3.0, 8, 200)
+        ledger.record("r2", "b2", "a2", 2.0, 7, 300)
         assert len(ledger.get_transactions(buyer_id="b1")) == 1
         assert len(ledger.get_transactions(buyer_id="b2")) == 1
         assert len(ledger.get_transactions(buyer_id="b3")) == 0
 
     def test_ledger_query_by_agent(self):
         ledger = Ledger()
-        ledger.record("r1", "b1", "a1", 3.0, 5.0, 8, 200)
-        ledger.record("r2", "b2", "a1", 2.0, 5.0, 7, 300)
+        ledger.record("r1", "b1", "a1", 3.0, 8, 200)
+        ledger.record("r2", "b2", "a1", 2.0, 7, 300)
         assert len(ledger.get_transactions(agent_id="a1")) == 2
 
     def test_ledger_totals_empty(self):
@@ -425,11 +425,11 @@ class TestSettlement:
 
     def test_ledger_totals_multiple(self):
         ledger = Ledger()
-        ledger.record("r1", "b1", "a1", 0.03, 0.05, 8, 200)
-        ledger.record("r2", "b1", "a2", 0.02, 0.05, 7, 300)
+        ledger.record("r1", "b1", "a1", 0.05, 8, 200)
+        ledger.record("r2", "b1", "a2", 0.05, 7, 300)
         totals = ledger.get_totals()
         assert totals["total_transactions"] == 2
-        assert abs(totals["total_volume"] - 0.05) < 0.001
+        assert abs(totals["total_volume"] - 0.10) < 0.001
 
     def test_ledger_concurrent_writes(self):
         ledger = Ledger()
@@ -438,7 +438,7 @@ class TestSettlement:
         def write(i):
             try:
                 ledger.record(f"r{i}", "b1", f"a{i}",
-                              float(i), 100.0, 7, 100)
+                              float(i), 7, 100)
             except Exception as e:
                 errors.append(e)
 
@@ -469,52 +469,24 @@ def _make_state(**kwargs) -> GameState:
 class TestReceiveSubmission:
     def test_normal_submission(self):
         state = _make_state()
-        assert receive_submission(state, "a1", 3.0, "output") is True
+        assert receive_submission(state, "a1", "output") is True
         assert "a1" in state.submissions
-        assert state.submissions["a1"].bid == 3.0
         assert state.submissions["a1"].revision == 0
 
     def test_reject_after_game_done(self):
         state = _make_state()
         state.done = True
-        assert receive_submission(state, "a1", 3.0, "output") is False
-
-    def test_reject_bid_over_max_price(self):
-        state = _make_state(max_price=5.0)
-        assert receive_submission(state, "a1", 6.0, "output") is False
-
-    def test_reject_negative_bid(self):
-        state = _make_state()
-        assert receive_submission(state, "a1", -1.0, "output") is False
-
-    def test_accept_zero_bid(self):
-        state = _make_state()
-        assert receive_submission(state, "a1", 0.0, "output") is True
-
-    def test_accept_bid_at_exact_max_price(self):
-        """bid=5.0, buyer_ask=5.0: spread=0, fee=0, total=5.0 — accepted."""
-        state = _make_state(max_price=5.0)
-        assert receive_submission(state, "a1", 5.0, "output") is True
-
-    def test_reject_bid_plus_fee_exceeds_buyer_ask(self):
-        """bid + exchange_fee must not exceed buyer_ask."""
-        # buyer_ask=0.05, bid=0.049
-        # spread=0.001, fee=20%*0.001=0.0002, total=0.0492 — accepted
-        state = _make_state(max_price=0.05)
-        assert receive_submission(state, "a1", 0.049, "output") is True
-        # buyer_ask=0.05, bid=0.0499
-        # spread=0.0001, fee=20%*0.0001=0.00002, total=0.04992 — accepted
-        assert receive_submission(state, "a2", 0.0499, "output") is True
+        assert receive_submission(state, "a1", "output") is False
 
     def test_empty_work_accepted(self):
         state = _make_state()
-        assert receive_submission(state, "a1", 1.0, "") is True
+        assert receive_submission(state, "a1", "") is True
 
     def test_revision_increments(self):
         state = _make_state()
-        receive_submission(state, "a1", 3.0, "v1")
+        receive_submission(state, "a1", "v1")
         assert state.submissions["a1"].revision == 0
-        receive_submission(state, "a1", 3.0, "v2")
+        receive_submission(state, "a1", "v2")
         assert state.submissions["a1"].revision == 1
         assert state.submissions["a1"].work == "v2"
 
@@ -522,15 +494,15 @@ class TestReceiveSubmission:
         """No cap on revisions — deadline is the natural constraint."""
         state = _make_state()
         for i in range(20):
-            assert receive_submission(state, "a1", 3.0, f"v{i}") is True
+            assert receive_submission(state, "a1", f"v{i}") is True
         assert state.submissions["a1"].revision == 19
         assert state.submissions["a1"].work == "v19"
 
     def test_multiple_agents_submit(self):
         state = _make_state()
-        receive_submission(state, "a1", 3.0, "work1")
-        receive_submission(state, "a2", 2.0, "work2")
-        receive_submission(state, "a3", 4.0, "work3")
+        receive_submission(state, "a1", "work1")
+        receive_submission(state, "a2", "work2")
+        receive_submission(state, "a3", "work3")
         assert len(state.submissions) == 3
 
     def test_concurrent_submissions(self):
@@ -539,7 +511,7 @@ class TestReceiveSubmission:
 
         def submit(i):
             try:
-                receive_submission(state, f"a{i}", float(i % 5), f"work{i}")
+                receive_submission(state, f"a{i}", f"work{i}")
             except Exception as e:
                 errors.append(e)
 
@@ -562,20 +534,20 @@ class TestGetQualifiers:
     def test_one_qualifier(self):
         state = _make_state(min_quality=7)
         state.submissions["a1"] = Submission(
-            agent_id="a1", request_id="r1", bid=3.0,
+            agent_id="a1", request_id="r1",
             work="good", score=8)
         state.submissions["a2"] = Submission(
-            agent_id="a2", request_id="r1", bid=2.0,
+            agent_id="a2", request_id="r1",
             work="bad", score=5)
         assert _get_qualifiers(state) == ["a1"]
 
     def test_multiple_qualifiers(self):
         state = _make_state(min_quality=7)
         state.submissions["a1"] = Submission(
-            agent_id="a1", request_id="r1", bid=3.0,
+            agent_id="a1", request_id="r1",
             work="good", score=8)
         state.submissions["a2"] = Submission(
-            agent_id="a2", request_id="r1", bid=1.0,
+            agent_id="a2", request_id="r1",
             work="ok", score=7)
         qualifiers = _get_qualifiers(state)
         assert set(qualifiers) == {"a1", "a2"}
@@ -583,21 +555,21 @@ class TestGetQualifiers:
     def test_score_exactly_at_threshold(self):
         state = _make_state(min_quality=7)
         state.submissions["a1"] = Submission(
-            agent_id="a1", request_id="r1", bid=3.0,
+            agent_id="a1", request_id="r1",
             work="ok", score=7)
         assert _get_qualifiers(state) == ["a1"]
 
     def test_score_one_below_threshold(self):
         state = _make_state(min_quality=7)
         state.submissions["a1"] = Submission(
-            agent_id="a1", request_id="r1", bid=3.0,
+            agent_id="a1", request_id="r1",
             work="ok", score=6)
         assert _get_qualifiers(state) == []
 
     def test_unscored_submission_excluded(self):
         state = _make_state(min_quality=7)
         state.submissions["a1"] = Submission(
-            agent_id="a1", request_id="r1", bid=3.0,
+            agent_id="a1", request_id="r1",
             work="good", score=None)
         assert _get_qualifiers(state) == []
 
@@ -606,21 +578,22 @@ class TestSelectWinner:
     def test_earliest_timestamp_wins(self):
         state = _make_state()
         state.submissions["a1"] = Submission(
-            agent_id="a1", request_id="r1", bid=3.0,
+            agent_id="a1", request_id="r1",
             work="good", score=8, timestamp=1.0)
         state.submissions["a2"] = Submission(
-            agent_id="a2", request_id="r1", bid=1.0,
+            agent_id="a2", request_id="r1",
             work="ok", score=7, timestamp=2.0)
         result = _select_winner(state, ["a1", "a2"])
         assert result.agent_id == "a1"  # arrived first
+        assert result.price == 5.0  # fill price = max_price
 
-    def test_same_bid_earliest_timestamp_wins(self):
+    def test_earliest_timestamp_wins_regardless(self):
         state = _make_state()
         state.submissions["a1"] = Submission(
-            agent_id="a1", request_id="r1", bid=2.0,
+            agent_id="a1", request_id="r1",
             work="first", score=8, timestamp=100.0)
         state.submissions["a2"] = Submission(
-            agent_id="a2", request_id="r1", bid=2.0,
+            agent_id="a2", request_id="r1",
             work="second", score=8, timestamp=200.0)
         result = _select_winner(state, ["a1", "a2"])
         assert result.agent_id == "a1"
@@ -628,7 +601,7 @@ class TestSelectWinner:
     def test_sets_game_state_done(self):
         state = _make_state()
         state.submissions["a1"] = Submission(
-            agent_id="a1", request_id="r1", bid=3.0,
+            agent_id="a1", request_id="r1",
             work="ok", score=7, timestamp=1.0)
         _select_winner(state, ["a1"])
         assert state.done is True
@@ -637,10 +610,11 @@ class TestSelectWinner:
     def test_single_qualifier(self):
         state = _make_state()
         state.submissions["a1"] = Submission(
-            agent_id="a1", request_id="r1", bid=3.0,
+            agent_id="a1", request_id="r1",
             work="ok", score=7, timestamp=1.0)
         result = _select_winner(state, ["a1"])
         assert result.agent_id == "a1"
+        assert result.price == 5.0  # fill price = max_price
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -735,7 +709,7 @@ class TestTypes:
 
     def test_submission_defaults(self):
         sub = Submission(agent_id="a1", request_id="r1",
-                         bid=1.0, work="hello")
+                         work="hello")
         assert sub.score is None
         assert sub.feedback is None
         assert sub.revision == 0

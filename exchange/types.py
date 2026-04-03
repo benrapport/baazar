@@ -19,7 +19,6 @@ class RegisteredAgent(BaseModel):
 class Submission(BaseModel):
     agent_id: str
     request_id: str
-    bid: float  # USD
     work: str
     timestamp: float = Field(default_factory=time.time)
     score: int | None = None
