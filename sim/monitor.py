@@ -63,14 +63,14 @@ async def api_status():
 
     # Agent leaderboard
     agent_wins = Counter()
-    agent_bids = Counter()
+    agent_revenue = Counter()
     agent_scores = {}
     for r in results:
         if r.get("winner_agent"):
             aid = r["winner_agent"]
             agent_wins[aid] += 1
-            if r.get("winning_bid") is not None:
-                agent_bids[aid] += r["winning_bid"]
+            if r.get("fill_price") is not None:
+                agent_revenue[aid] += r["fill_price"]
             if r.get("score") is not None:
                 agent_scores.setdefault(aid, []).append(r["score"])
 
@@ -80,7 +80,7 @@ async def api_status():
         leaderboard.append({
             "agent": aid,
             "wins": w,
-            "total_revenue": round(agent_bids.get(aid, 0), 4),
+            "total_revenue": round(agent_revenue.get(aid, 0), 4),
             "avg_score": round(sum(scores) / len(scores), 1) if scores else 0,
         })
 
@@ -127,7 +127,7 @@ async def api_status():
             "category": r.get("category", "?"),
             "difficulty": r.get("difficulty", "?"),
             "winner": r.get("winner_agent", "—"),
-            "bid": r.get("winning_bid"),
+            "price": r.get("fill_price"),
             "score": r.get("score"),
             "error": r.get("error", "")[:60] if r.get("error") else None,
         })
@@ -306,7 +306,7 @@ async function refresh() {
       `<td>${r.category}</td>` +
       `<td><span class="badge ${r.difficulty}">${r.difficulty}</span></td>` +
       `<td class="${r.winner !== '—' ? 'winner-text' : ''}">${r.winner}</td>` +
-      `<td>${r.bid != null ? '$' + r.bid.toFixed(4) : '—'}</td>` +
+      `<td>${r.price != null ? '$' + r.price.toFixed(4) : '—'}</td>` +
       `<td>${r.score != null ? r.score + '/10' : '—'}</td>` +
       `<td class="error-text" style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.error || ''}</td>` +
       `</tr>`

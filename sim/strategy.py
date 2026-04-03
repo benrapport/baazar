@@ -1,8 +1,7 @@
-"""Bidding strategy for tool-calling agents.
+"""Fill/pass strategy for tool-calling agents (RFQ model).
 
-Agents must decide:
-1. Should I compete on this task?
-2. If yes, what bid?
+Agents must decide: should I fill this request at the buyer's price?
+No supply-side bidding — the buyer's max_price IS the fill price.
 """
 
 from constants.models import Model, MODEL_COSTS
@@ -88,24 +87,24 @@ def assess_difficulty(task_input: str) -> dict:
     }
 
 
-def compute_bid(
+def should_fill(
     difficulty: dict,
     max_price: float,
     model: Model,
     budget_remaining_cents: float,
-    aggression: float = 0.5,
-) -> float | None:
-    """Compute bid price in USD. Returns None if agent should pass.
+    min_margin: float = 0.5,
+) -> bool:
+    """Decide whether to fill this request at the buyer's max_price.
 
     Args:
         difficulty: Output from assess_difficulty()
-        max_price: Maximum price buyer is willing to pay (in USD)
+        max_price: Fill price in USD (buyer's posted price)
         model: Model the agent would use
         budget_remaining_cents: Remaining budget in cents
-        aggression: 0.0 = bid at minimum, 1.0 = bid at maximum
+        min_margin: Minimum profit margin required (0.1 = 10%, 0.5 = 50%)
 
     Returns:
-        Bid in USD, or None to pass.
+        True to fill, False to pass.
     """
     # Get model costs (input, output per million tokens)
     input_cost_per_m, output_cost_per_m = MODEL_COSTS[model]
@@ -118,29 +117,22 @@ def compute_bid(
 
     # Check budget
     if budget_remaining_cents < estimated_cost_cents:
-        return None
+        return False
 
-    # Calculate min and max bids
-    min_bid = estimated_cost_usd * 1.2
-    max_bid = max_price * 0.8
-
-    # Can't profitably compete
-    if min_bid > max_bid:
-        return None
+    # Check profitability: max_price must cover cost + required margin
+    required_price = estimated_cost_usd * (1 + min_margin)
+    if max_price < required_price:
+        return False
 
     difficulty_level = difficulty["level"]
 
-    # Cheap models bid on easy/medium only
+    # Cheap models fill easy/medium only
     if model in (Model.GPT_4O_MINI, Model.GPT_5_4_NANO):
         if difficulty_level in ("hard", "extreme"):
-            return None
+            return False
     # Expensive models skip easy tasks
     elif model in (Model.GPT_4O, Model.GPT_4_1, Model.O4_MINI, Model.CLAUDE_SONNET):
         if difficulty_level == "easy":
-            return None
+            return False
 
-    # Bid = min_bid + aggression * (max_bid - min_bid)
-    bid = min_bid + aggression * (max_bid - min_bid)
-    bid = min(max_bid, max(min_bid, bid))
-
-    return round(bid, 4)
+    return True

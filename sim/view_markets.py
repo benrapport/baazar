@@ -73,18 +73,16 @@ def print_market_detail(market: dict):
         elif etype == "broadcast_failed":
             print(f"  {t:>8s}  BROADCAST FAILED → {data.get('agent_id', '?')}  error={data.get('error', '?')}")
 
-        elif etype == "bid_received":
+        elif etype == "submission_received":
             agent = data.get("agent_id", "?")
-            bid = data.get("bid", 0)
             rev = data.get("revision", 0)
             rev_str = f" (rev {rev})" if rev > 0 else ""
-            print(f"  {t:>8s}  BID ← {agent}  ${bid:.4f}{rev_str}")
+            print(f"  {t:>8s}  SUBMISSION ← {agent}{rev_str}")
 
-        elif etype == "bid_rejected":
+        elif etype == "submission_rejected":
             agent = data.get("agent_id", "?")
-            bid = data.get("bid", 0)
             reason = data.get("reason", "?")
-            print(f"  {t:>8s}  REJECTED ← {agent}  ${bid:.4f}  reason={reason}")
+            print(f"  {t:>8s}  REJECTED ← {agent}  reason={reason}")
 
         elif etype == "judge_started":
             agent = data.get("agent_id", "?")
@@ -103,16 +101,16 @@ def print_market_detail(market: dict):
 
         elif etype == "winner_selected":
             agent = data.get("agent_id", "?")
-            bid = data.get("bid", 0)
+            fill_price = data.get("fill_price", 0)
             score = data.get("score", "?")
             latency = data.get("latency_ms", 0)
-            print(f"  {t:>8s}  WINNER  {agent}  ${bid:.4f}  score={score}/10  latency={latency:.0f}ms")
+            print(f"  {t:>8s}  WINNER  {agent}  ${fill_price:.4f}  score={score}/10  latency={latency:.0f}ms")
 
         elif etype == "market_settled":
-            price = data.get("price", 0)
+            fill_price = data.get("fill_price", 0)
             fee = data.get("exchange_fee", 0)
             charged = data.get("buyer_charged", 0)
-            print(f"  {t:>8s}  SETTLED  price=${price:.4f}  fee=${fee:.4f}  buyer_charged=${charged:.4f}")
+            print(f"  {t:>8s}  SETTLED  fill=${fill_price:.4f}  fee=${fee:.4f}  buyer_charged=${charged:.4f}")
 
         elif etype == "market_timeout":
             subs = data.get("submissions_received", 0)
@@ -128,18 +126,18 @@ def print_market_summary(market: dict):
     rid = market["request_id"]
     winner = market.get("winner", "none")
     n_events = len(market.get("events", []))
-    bids = [e for e in market.get("events", []) if e["type"] == "bid_received"]
+    submissions = [e for e in market.get("events", []) if e["type"] == "submission_received"]
     scores = [e for e in market.get("events", []) if e["type"] == "judge_completed"]
 
     opened = market["opened_at"]
     closed = market.get("closed_at")
     duration_ms = ((closed - opened) * 1000) if closed else 0
 
-    bidders = ", ".join(
-        f"{b['data']['agent_id']}=${b['data']['bid']:.4f}" for b in bids
+    fillers = ", ".join(
+        b['data']['agent_id'] for b in submissions
     )
 
-    print(f"  {rid}  winner={winner:20s}  {duration_ms:>6.0f}ms  bids=[{bidders}]")
+    print(f"  {rid}  winner={winner:20s}  {duration_ms:>6.0f}ms  submissions=[{fillers}]")
 
 
 def main():

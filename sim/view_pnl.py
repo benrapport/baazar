@@ -63,16 +63,16 @@ def compute_pnl(markets: list[dict], summary: dict) -> dict:
     settled_markets = 0
 
     for market in markets:
-        # Count bids per agent
+        # Count submissions per agent
         for event in market.get("events", []):
-            if event["type"] == "bid_received":
+            if event["type"] == "submission_received":
                 aid = event["data"]["agent_id"]
                 agent_tasks_bid[aid] = agent_tasks_bid.get(aid, 0) + 1
 
             if event["type"] == "market_settled":
                 d = event["data"]
                 aid = d["agent_id"]
-                agent_revenue[aid] = agent_revenue.get(aid, 0) + d["price"]
+                agent_revenue[aid] = agent_revenue.get(aid, 0) + d["fill_price"]
                 agent_wins[aid] = agent_wins.get(aid, 0) + 1
                 exchange_fees += d["exchange_fee"]
                 buyer_total_charged += d["buyer_charged"]

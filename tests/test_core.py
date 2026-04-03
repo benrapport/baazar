@@ -29,7 +29,7 @@ def test_call_request_defaults():
     assert r.exchange.timeout == 30.0
 
 def test_submission():
-    s = Submission(agent_id="a1", request_id="r1", bid=1.0, work="done")
+    s = Submission(agent_id="a1", request_id="r1", work="done")
     assert s.revision == 0
     assert s.score is None
 
@@ -72,27 +72,27 @@ def test_registry_returns_all_no_filtering():
 
 # ── Settlement ────────────────────────────────────────────────────────
 
-def test_exchange_fee_20_percent_of_spread():
-    # 20% of ($0.10 - $0.06) = 20% of $0.04 = $0.008
-    assert abs(calc_exchange_fee(0.10, 0.06) - 0.008) < 0.0001
+def test_exchange_fee_1_5_percent_of_fill_price():
+    # 1.5% of $0.10 = $0.0015
+    assert abs(calc_exchange_fee(0.10) - 0.0015) < 0.00001
 
-def test_exchange_fee_capped_at_1_cent():
-    # 20% of ($1.00 - $0.02) = $0.196, capped at $0.01
-    assert abs(calc_exchange_fee(1.00, 0.02) - 0.01) < 0.0001
+def test_exchange_fee_scales_with_price():
+    # 1.5% of $1.00 = $0.015
+    assert abs(calc_exchange_fee(1.00) - 0.015) < 0.00001
 
-def test_exchange_fee_zero_spread():
-    assert calc_exchange_fee(0.05, 0.05) == 0.0
+def test_exchange_fee_zero_price():
+    assert calc_exchange_fee(0.0) == 0.0
 
 def test_ledger_record_and_query():
     ledger = Ledger()
     tx = ledger.record(
         request_id="r1", buyer_id="b1", agent_id="a1",
-        price=0.03, buyer_ask=0.05,
+        price=0.05,
         score=8, latency_ms=200,
     )
-    assert tx.price == 0.03
-    assert abs(tx.exchange_fee - 0.004) < 0.0001  # 20% of $0.02 spread
-    assert abs(tx.buyer_charged - 0.034) < 0.0001
+    assert tx.price == 0.05
+    assert abs(tx.exchange_fee - 0.00075) < 0.00001  # 1.5% of $0.05
+    assert abs(tx.buyer_charged - 0.05075) < 0.00001
 
     all_txns = ledger.get_transactions()
     assert len(all_txns) == 1
@@ -105,11 +105,11 @@ def test_ledger_record_and_query():
 
 def test_ledger_totals():
     ledger = Ledger()
-    ledger.record("r1", "b1", "a1", 0.03, 0.05, 8, 200)
-    ledger.record("r2", "b1", "a2", 0.02, 0.05, 7, 300)
+    ledger.record("r1", "b1", "a1", 0.05, 8, 200)
+    ledger.record("r2", "b1", "a2", 0.05, 7, 300)
     totals = ledger.get_totals()
     assert totals["total_transactions"] == 2
-    assert abs(totals["total_volume"] - 0.05) < 0.001
+    assert abs(totals["total_volume"] - 0.10) < 0.001
 
 
 # ── Judge (parse_json only — no API calls) ────────────────────────────
@@ -149,30 +149,23 @@ def test_receive_submission():
     state = GameState(request_id="r1", input="img",
                       max_price=5.0, min_quality=7, buyer_id="b1")
 
-    assert receive_submission(state, "a1", 3.0, "output") is True
+    assert receive_submission(state, "a1", "output") is True
     assert "a1" in state.submissions
-    assert state.submissions["a1"].bid == 3.0
-
-def test_receive_submission_rejects_over_max_price():
-    from exchange.game import receive_submission
-    state = GameState(request_id="r1", input="img",
-                      max_price=5.0, min_quality=7, buyer_id="b1")
-    assert receive_submission(state, "a1", 6.0, "output") is False
 
 def test_receive_submission_rejects_when_done():
     from exchange.game import receive_submission
     state = GameState(request_id="r1", input="img",
                       max_price=5.0, min_quality=7, buyer_id="b1")
     state.done = True
-    assert receive_submission(state, "a1", 3.0, "output") is False
+    assert receive_submission(state, "a1", "output") is False
 
 def test_receive_revision_increments():
     from exchange.game import receive_submission
     state = GameState(request_id="r1", input="img",
                       max_price=5.0, min_quality=7, buyer_id="b1")
-    receive_submission(state, "a1", 3.0, "v1")
+    receive_submission(state, "a1", "v1")
     assert state.submissions["a1"].revision == 0
-    receive_submission(state, "a1", 3.0, "v2")
+    receive_submission(state, "a1", "v2")
     assert state.submissions["a1"].revision == 1
     assert state.submissions["a1"].work == "v2"
 
@@ -181,13 +174,13 @@ def test_get_qualifiers():
     state = GameState(request_id="r1", input="img",
                       max_price=5.0, min_quality=7, buyer_id="b1")
     state.submissions["a1"] = Submission(
-        agent_id="a1", request_id="r1", bid=3.0,
+        agent_id="a1", request_id="r1",
         work="good", score=8)
     state.submissions["a2"] = Submission(
-        agent_id="a2", request_id="r1", bid=2.0,
+        agent_id="a2", request_id="r1",
         work="bad", score=5)
     state.submissions["a3"] = Submission(
-        agent_id="a3", request_id="r1", bid=1.0,
+        agent_id="a3", request_id="r1",
         work="ok", score=7)
 
     qualifiers = _get_qualifiers(state)
@@ -199,15 +192,15 @@ def test_select_winner_picks_earliest_timestamp():
     state = GameState(request_id="r1", input="img",
                       max_price=5.0, min_quality=7, buyer_id="b1")
     state.submissions["a1"] = Submission(
-        agent_id="a1", request_id="r1", bid=3.0,
+        agent_id="a1", request_id="r1",
         work="good", score=8, timestamp=1.0)
     state.submissions["a3"] = Submission(
-        agent_id="a3", request_id="r1", bid=1.0,
+        agent_id="a3", request_id="r1",
         work="ok", score=7, timestamp=2.0)
 
     result = _select_winner(state, ["a1", "a3"])
     assert result.agent_id == "a1"  # arrived first
-    assert result.price == 3.0
+    assert result.price == 5.0  # fill price = max_price
 
 
 if __name__ == "__main__":

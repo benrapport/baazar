@@ -149,11 +149,11 @@ async def submit_work(request_id: str, sub: SubmissionPayload):
     if not state:
         raise HTTPException(404, f"No active game for request {request_id}")
 
-    accepted = receive_submission(state, sub.agent_id, sub.bid, sub.work)
+    accepted = receive_submission(state, sub.agent_id, sub.work)
     if not accepted:
-        raise HTTPException(400, "Submission rejected (game done or bid too high)")
+        raise HTTPException(400, "Submission rejected (market closed)")
 
-    logger.info(f"[{request_id}] Submission from {sub.agent_id}: ${sub.bid:.4f}")
+    logger.info(f"[{request_id}] Submission from {sub.agent_id}")
     return {"status": "accepted", "agent_id": sub.agent_id}
 
 

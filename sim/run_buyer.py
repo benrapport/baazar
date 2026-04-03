@@ -108,7 +108,7 @@ async def fire_tasks(
                         category=task.category,
                         difficulty=task.difficulty,
                         winner_agent=r.get("agent_id"),
-                        winning_bid=r.get("price"),
+                        fill_price=r.get("price"),
                         score=r.get("score"),
                         latency_ms=r.get("latency_ms", 0),
                         output=r.get("output", ""),

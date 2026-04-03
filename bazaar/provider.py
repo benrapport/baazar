@@ -31,8 +31,8 @@ class AgentProvider:
 
         @provider.handle()
         def handle_request(request):
-            # Do the work, return bid + output
-            return {"bid": 0.005, "work": "result..."}
+            # Do the work, return output (or None to pass)
+            return {"work": "result..."}
 
         provider.start()  # blocks, starts listening
     """
@@ -56,8 +56,8 @@ class AgentProvider:
         """Decorator to register a handler for incoming requests.
 
         The handler receives a dict with {request_id, input, max_price,
-        deadline_unix, ...} and must return a dict with {bid, work}.
-        All prices in USD. Return None to pass (decline to compete).
+        deadline_unix, ...} and must return a dict with {work}.
+        Return None to pass (decline to fill).
         """
         def decorator(fn: Callable):
             self._handler = fn
@@ -96,13 +96,11 @@ class AgentProvider:
         if result is None:
             return
 
-        bid = result.get("bid", 0)
         work = result.get("work", "")
 
         sub = SubmissionPayload(
             agent_id=self.agent_id,
             request_id=payload.request_id,
-            bid=bid,
             work=work,
         )
         try:
@@ -113,18 +111,17 @@ class AgentProvider:
                 )
                 if resp.status_code == 404:
                     logger.warning(
-                        f"Auction {payload.request_id} already closed "
-                        f"(agent too slow), bid=${bid:.4f}"
+                        f"Market {payload.request_id} already closed "
+                        f"(agent too slow)"
                     )
                 elif resp.status_code >= 400:
                     logger.warning(
                         f"Submission rejected for {payload.request_id}: "
-                        f"bid=${bid:.4f}, status={resp.status_code}"
+                        f"status={resp.status_code}"
                     )
                 else:
                     logger.info(
-                        f"Submitted to {payload.request_id}: "
-                        f"bid=${bid:.4f}, accepted"
+                        f"Submitted to {payload.request_id}: accepted"
                     )
         except Exception as e:
             logger.error(f"Failed to submit: {e}")

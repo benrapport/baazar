@@ -87,7 +87,7 @@ def build_timeseries(markets: list[dict], agent_costs: dict) -> dict:
             if event["type"] == "market_settled":
                 d = event["data"]
                 agent_id = d["agent_id"]
-                price = d["price"]
+                price = d["fill_price"]
                 fee = d["exchange_fee"]
                 buyer_charged = d["buyer_charged"]
 

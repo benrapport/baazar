@@ -229,7 +229,7 @@ class SimulationRunner:
                     category=task.category,
                     difficulty=task.difficulty,
                     winner_agent=exchange_result.get("agent_id"),
-                    winning_bid=exchange_result.get("price"),
+                    fill_price=exchange_result.get("price"),
                     score=exchange_result.get("score"),
                     latency_ms=exchange_result.get("latency_ms", 0),
                     output=exchange_result.get("output", ""),

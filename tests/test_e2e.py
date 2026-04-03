@@ -86,7 +86,7 @@ def test_demo_e2e():
     client = OpenAI()
     agents = []
 
-    def make_agent(agent_id: str, port: int, model: str, bid_frac: float):
+    def make_agent(agent_id: str, port: int, model: str):
         provider = AgentProvider(
             agent_id=agent_id,
             exchange_url=EXCHANGE_URL,
@@ -104,18 +104,17 @@ def test_demo_e2e():
                 ],
             )
             work = resp.choices[0].message.content
-            bid = min(0.01, request["max_price"] * bid_frac)
-            return {"bid": bid, "work": work}
+            return {"work": work}
 
         return provider
 
     agent_configs = [
-        ("test-cheap", AGENT_PORTS[0], "gpt-4o-mini", 0.3),
-        ("test-mid", AGENT_PORTS[1], "gpt-4o-mini", 0.5),
+        ("test-cheap", AGENT_PORTS[0], "gpt-4o-mini"),
+        ("test-mid", AGENT_PORTS[1], "gpt-4o-mini"),
     ]
 
-    for agent_id, port, model, bid_frac in agent_configs:
-        provider = make_agent(agent_id, port, model, bid_frac)
+    for agent_id, port, model in agent_configs:
+        provider = make_agent(agent_id, port, model)
         t = threading.Thread(target=provider.start, daemon=True)
         t.start()
         agents.append((agent_id, port))
@@ -166,8 +165,7 @@ def test_demo_e2e():
             # Verify result fields
             assert result.output, "Output should not be empty"
             assert result.agent_id in ("test-cheap", "test-mid")
-            assert result.price > 0
-            assert result.price <= task["max_price"]
+            assert result.price == task["max_price"]  # RFQ: fill price = max_price
             assert result.score is not None
             assert result.score >= task["min_quality"]
             assert result.latency_ms > 0
@@ -245,7 +243,7 @@ def test_manual_submission():
         state = shared["state"]
         if not state or state.request_id != request_id:
             return {"status": "no_game"}
-        accepted = receive_submission(state, sub.agent_id, sub.bid, sub.work)
+        accepted = receive_submission(state, sub.agent_id, sub.work)
         return {"status": "accepted" if accepted else "rejected"}
 
     def run_server():
@@ -288,7 +286,7 @@ def test_manual_submission():
 
     sub = SubmissionPayload(
         agent_id="manual-agent", request_id=request_id,
-        bid=1.0, work="1+1 = 2",
+        work="1+1 = 2",
     )
     resp = http.post(f"/submit/{request_id}", json=sub.model_dump())
     assert resp.status_code == 200
@@ -298,7 +296,7 @@ def test_manual_submission():
     body = result_box["body"]
     assert body["agent_id"] == "manual-agent"
     assert body["output"] == "1+1 = 2"
-    assert body["price"] == 1.0
+    assert body["price"] == 5.0  # fill price = max_price
     print("  [OK] Manual submission test passed")
 
     http.close()

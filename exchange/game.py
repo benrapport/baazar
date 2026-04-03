@@ -1,9 +1,10 @@
 """Game engine — broadcast, collect, judge, select.
 
-Broadcast full request to ALL agents. Agents submit work + price.
+Broadcast full request to ALL agents. Agents submit work.
 Each submission triggers an immediate, concurrent judge evaluation.
 Winner is the earliest-timestamped qualifying submission.
 We never declare a winner while earlier submissions are still being judged.
+RFQ model: buyer sets the fill price (max_price). No supply-side bidding.
 """
 
 from __future__ import annotations
@@ -120,8 +121,7 @@ async def run_game(
         request_id=request_id,
         buyer_id=buyer_id,
         agent_id=result.agent_id,
-        price=winner_sub.bid,
-        buyer_ask=max_price,
+        price=max_price,
         score=winner_sub.score,
         latency_ms=result.latency_ms,
     )
@@ -129,7 +129,7 @@ async def run_game(
     mlog.emit(
         "winner_selected",
         agent_id=result.agent_id,
-        bid=winner_sub.bid,
+        fill_price=max_price,
         score=winner_sub.score,
         latency_ms=result.latency_ms,
         reason="earliest qualifying submission",
@@ -138,7 +138,7 @@ async def run_game(
         "market_settled",
         tx_id=tx.tx_id,
         agent_id=result.agent_id,
-        price=winner_sub.bid,
+        fill_price=max_price,
         exchange_fee=tx.exchange_fee,
         buyer_charged=tx.buyer_charged,
     )
@@ -149,7 +149,7 @@ async def run_game(
         market_log_store.store(mlog)
 
     logger.info(
-        f"[{request_id}] Winner: {result.agent_id} @ ${winner_sub.bid:.4f} "
+        f"[{request_id}] Winner: {result.agent_id} @ ${max_price:.4f} "
         f"(score {winner_sub.score}/10, fee ${tx.exchange_fee:.4f})"
     )
 
@@ -270,7 +270,7 @@ async def _wait_for_winner(state: GameState, judge: Judge,
             ]
 
         if qualifiers:
-            # Sort by bid (lowest), then timestamp (earliest)
+            # Sort by timestamp (earliest first — first to fill wins)
             qualifiers.sort(key=lambda x: x[1].timestamp)
             best_aid, best_sub = qualifiers[0]
 
@@ -289,7 +289,7 @@ async def _wait_for_winner(state: GameState, judge: Judge,
                 return ExchangeResult(
                     output=best_sub.work,
                     agent_id=best_aid,
-                    price=best_sub.bid,
+                    price=state.max_price,
                     latency_ms=(time.time() - state.start_time) * 1000,
                     score=best_sub.score,
                 )
@@ -303,11 +303,7 @@ async def _wait_for_winner(state: GameState, judge: Judge,
 # ── Helpers (used by tests + external callers) ────────────────────────
 
 def _get_qualifiers(state: GameState) -> list[str]:
-    """Return agent IDs whose submissions meet quality threshold.
-
-    Bid validity (bid + fee <= buyer_ask) is enforced at submission time,
-    so qualifiers only need to check score.
-    """
+    """Return agent IDs whose submissions meet quality threshold."""
     with state.lock:
         return [
             aid for aid, sub in state.submissions.items()
@@ -331,38 +327,25 @@ def _select_winner(state: GameState,
     return ExchangeResult(
         output=sub.work,
         agent_id=winner,
-        price=sub.bid,
+        price=state.max_price,
         latency_ms=(time.time() - state.start_time) * 1000,
         score=sub.score,
     )
 
 
 def receive_submission(state: GameState, agent_id: str,
-                       bid: float, work: str) -> bool:
+                       work: str) -> bool:
     """Called when an agent POSTs a submission. Returns True if accepted.
 
-    Rejects bids where bid + exchange_fee would exceed buyer_ask.
+    RFQ model: no bid — buyer's max_price is the fill price.
     """
-    from exchange.settlement import calc_exchange_fee
-
     mlog = state.market_log
 
     with state.lock:
         if state.done:
             if mlog:
-                mlog.emit("bid_rejected", agent_id=agent_id, bid=bid,
+                mlog.emit("submission_rejected", agent_id=agent_id,
                           reason="market closed")
-            return False
-        if bid < 0:
-            if mlog:
-                mlog.emit("bid_rejected", agent_id=agent_id, bid=bid,
-                          reason="negative bid")
-            return False
-        fee = calc_exchange_fee(state.max_price, bid)
-        if bid + fee > state.max_price:
-            if mlog:
-                mlog.emit("bid_rejected", agent_id=agent_id, bid=bid,
-                          fee=fee, reason="bid + fee exceeds max_price")
             return False
 
         existing = state.submissions.get(agent_id)
@@ -371,11 +354,10 @@ def receive_submission(state: GameState, agent_id: str,
         state.submissions[agent_id] = Submission(
             agent_id=agent_id,
             request_id=state.request_id,
-            bid=bid,
             work=work,
             revision=revision,
         )
         if mlog:
-            mlog.emit("bid_received", agent_id=agent_id, bid=bid,
+            mlog.emit("submission_received", agent_id=agent_id,
                        revision=revision)
         return True

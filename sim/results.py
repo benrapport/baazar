@@ -15,7 +15,7 @@ class TaskResult:
     category: str
     difficulty: str
     winner_agent: str | None = None
-    winning_bid: float | None = None
+    fill_price: float | None = None
     score: int | None = None
     latency_ms: float = 0.0
     output: str = ""
@@ -100,13 +100,13 @@ def generate_summary(results: list[TaskResult]) -> dict:
         if agent not in agent_stats:
             agent_stats[agent] = {
                 "wins": 0,
-                "bids": [],
+                "prices": [],
                 "scores": [],
                 "latencies": [],
             }
         agent_stats[agent]["wins"] += 1
-        if result.winning_bid is not None:
-            agent_stats[agent]["bids"].append(result.winning_bid)
+        if result.fill_price is not None:
+            agent_stats[agent]["prices"].append(result.fill_price)
         if result.score is not None:
             agent_stats[agent]["scores"].append(result.score)
         if result.latency_ms > 0:
@@ -119,7 +119,7 @@ def generate_summary(results: list[TaskResult]) -> dict:
                 "agent": agent,
                 "wins": stats["wins"],
                 "win_rate": stats["wins"] / total_tasks if total_tasks > 0 else 0.0,
-                "avg_bid": sum(stats["bids"]) / len(stats["bids"]) if stats["bids"] else 0.0,
+                "avg_fill_price": sum(stats["prices"]) / len(stats["prices"]) if stats["prices"] else 0.0,
                 "avg_score": sum(stats["scores"]) / len(stats["scores"]) if stats["scores"] else 0.0,
                 "avg_latency_ms": sum(stats["latencies"]) / len(stats["latencies"]) if stats["latencies"] else 0.0,
             }
@@ -136,7 +136,7 @@ def generate_summary(results: list[TaskResult]) -> dict:
                 "total": 0,
                 "scores": [],
                 "latencies": [],
-                "bids": [],
+                "prices": [],
             }
         by_category[cat]["total"] += 1
         if result.error is None and result.winner_agent is not None:
@@ -145,8 +145,8 @@ def generate_summary(results: list[TaskResult]) -> dict:
             by_category[cat]["scores"].append(result.score)
         if result.latency_ms > 0:
             by_category[cat]["latencies"].append(result.latency_ms)
-        if result.winning_bid is not None:
-            by_category[cat]["bids"].append(result.winning_bid)
+        if result.fill_price is not None:
+            by_category[cat]["prices"].append(result.fill_price)
 
     category_summary = {}
     for cat, stats in by_category.items():
@@ -156,7 +156,7 @@ def generate_summary(results: list[TaskResult]) -> dict:
             "completion_rate": stats["completed"] / stats["total"] if stats["total"] > 0 else 0.0,
             "avg_score": sum(stats["scores"]) / len(stats["scores"]) if stats["scores"] else 0.0,
             "avg_latency_ms": sum(stats["latencies"]) / len(stats["latencies"]) if stats["latencies"] else 0.0,
-            "avg_bid": sum(stats["bids"]) / len(stats["bids"]) if stats["bids"] else 0.0,
+            "avg_fill_price": sum(stats["prices"]) / len(stats["prices"]) if stats["prices"] else 0.0,
         }
 
     # By difficulty
@@ -169,7 +169,7 @@ def generate_summary(results: list[TaskResult]) -> dict:
                 "total": 0,
                 "scores": [],
                 "latencies": [],
-                "bids": [],
+                "prices": [],
             }
         by_difficulty[diff]["total"] += 1
         if result.error is None and result.winner_agent is not None:
@@ -178,8 +178,8 @@ def generate_summary(results: list[TaskResult]) -> dict:
             by_difficulty[diff]["scores"].append(result.score)
         if result.latency_ms > 0:
             by_difficulty[diff]["latencies"].append(result.latency_ms)
-        if result.winning_bid is not None:
-            by_difficulty[diff]["bids"].append(result.winning_bid)
+        if result.fill_price is not None:
+            by_difficulty[diff]["prices"].append(result.fill_price)
 
     difficulty_summary = {}
     for diff, stats in by_difficulty.items():
@@ -189,12 +189,12 @@ def generate_summary(results: list[TaskResult]) -> dict:
             "completion_rate": stats["completed"] / stats["total"] if stats["total"] > 0 else 0.0,
             "avg_score": sum(stats["scores"]) / len(stats["scores"]) if stats["scores"] else 0.0,
             "avg_latency_ms": sum(stats["latencies"]) / len(stats["latencies"]) if stats["latencies"] else 0.0,
-            "avg_bid": sum(stats["bids"]) / len(stats["bids"]) if stats["bids"] else 0.0,
+            "avg_fill_price": sum(stats["prices"]) / len(stats["prices"]) if stats["prices"] else 0.0,
         }
 
     # Economics
-    total_volume = sum(r.winning_bid for r in results if r.winning_bid is not None)
-    priced_results = [r for r in results if r.winning_bid is not None]
+    total_volume = sum(r.fill_price for r in results if r.fill_price is not None)
+    priced_results = [r for r in results if r.fill_price is not None]
     avg_price = total_volume / len(priced_results) if priced_results else 0.0
 
     # Timing and latencies
