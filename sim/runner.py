@@ -223,7 +223,9 @@ class SimulationRunner:
             )
 
             if response.status_code == 200:
-                exchange_result = response.json()
+                data = response.json()
+                # Server returns list of results; take first winner
+                exchange_result = data[0] if isinstance(data, list) else data
                 return TaskResult(
                     task_id=task.task_id,
                     category=task.category,

@@ -35,13 +35,13 @@
 - `solve(game_state, route)` — the main loop
 - `_call_llm(model, system, messages, tools)` — abstract (backend implements)
 - `_execute_tool(tool_call, game_state)` — executor
-- `_compute_bid(route, game_state)` — bidding formula
+- `should_fill(route, game_state)` — fill/pass logic
 - `handle_broadcast(payload)` — entry point from exchange
 
 **Deliverables:**
 - [ ] Tool-calling loop works with mocked LLM
 - [ ] GameState properly tracks time/urgency
-- [ ] Bid formula tested with different difficulties
+- [ ] Fill/pass logic tested with different difficulties
 - [ ] Test with mock OpenAI/Anthropic responses
 
 **Key insight:** This is the heart of the design. Get it right before backends.
@@ -106,13 +106,13 @@
 
 ---
 
-### 2.3 Strategic Bidding (3 hours)
+### 2.3 Fill/Pass Strategy (3 hours)
 **Enhancements:**
 - Track past submissions per agent (learning)
-- Adjust bid based on competition (if available)
+- Adjust fill/pass margins based on task economics
 - Implement "rush cost" for urgent tasks
 
-**Test:** Bidding formula with varied game states
+**Test:** Fill/pass logic with varied game states
 
 ---
 
@@ -145,7 +145,7 @@
 - `tests/test_tools.py` — ToolRegistry, tool execution
 - `tests/test_agent_loop.py` — mocked LLM, tool-calling loop
 - `tests/test_routing.py` — route_task behavior
-- `tests/test_bidding.py` — bid formula edge cases
+- `tests/test_strategy.py` — fill/pass edge cases
 - `tests/test_integration.py` — full broadcast → submit flow
 
 **Coverage:** 80% of core logic
@@ -195,12 +195,12 @@ class ToolRegistry:
 
 class BaseAgent:
     async def handle_broadcast(self, payload):
-        """Main entry: receive → route → bid → solve → submit."""
+        """Main entry: receive → assess → fill/pass → solve → submit."""
         game_state = GameState(...)
         route = await self.route_task(game_state)
-        bid = self._compute_bid(route, game_state)
+        fill = self.should_fill(route, game_state)
         work = await self.solve(game_state, route)
-        return {"bid": bid, "work": work}
+        return {"work": work}
 
     async def solve(self, game_state, route):
         """Tool-calling loop."""

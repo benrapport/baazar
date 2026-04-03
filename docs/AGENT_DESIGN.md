@@ -6,9 +6,9 @@
 
 ## Overview
 
-This document specifies a production-grade, tool-calling agent architecture inspired by Claude Code's design. Agents receive tasks via auction broadcast, use a tool-calling loop to solve problems, and submit bids based on task difficulty and game state.
+This document specifies a production-grade, tool-calling agent architecture inspired by Claude Code's design. Agents receive tasks via RFQ market broadcast, use a tool-calling loop to solve problems, and submit work based on task difficulty and game state.
 
-Key insight: **Bidding and solving are interleaved, not separate.** The agent uses its tool-calling loop to _understand_ task difficulty, then decides whether (and how much) to bid while solving.
+Key insight: **Fill/Pass Decision and solving are interleaved, not separate.** The agent uses its tool-calling loop to _understand_ task difficulty, then decides whether (and how much) to decide fill/pass while solving.
 
 ---
 
@@ -25,7 +25,7 @@ Key insight: **Bidding and solving are interleaved, not separate.** The agent us
     │ Agent.handle_broadcast()           │
     │ - Parse task                       │
     │ - Assess difficulty via routing    │
-    │ - Decide bid (keep_price variable) │
+    │ - Decide fill/pass (keep_price variable) │
     └────────────────┬───────────────────┘
                      │
                      ▼
@@ -40,7 +40,7 @@ Key insight: **Bidding and solving are interleaved, not separate.** The agent us
                      ▼
         ┌─────────────────────────────┐
         │ POST /submit to Exchange    │
-        │ {bid, work}                 │
+        │ {work}                 │
         └─────────────────────────────┘
 ```
 
@@ -207,7 +207,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class GameState:
-    """Auction game state visible to the agent."""
+    """RFQ Market game state visible to the agent."""
     request_id: str
     input: str
     max_price: float
@@ -222,7 +222,7 @@ class GameState:
     def urgency_factor(self) -> float:
         """Return [0, 1] where 1 = about to deadline.
 
-        Used for bid strategy: rush cost when urgency is high.
+        Used for fill/pass strategy: rush cost when urgency is high.
         """
         total = self.deadline_unix - (self.deadline_unix - self.time_remaining_secs)
         if total <= 0:
@@ -244,9 +244,9 @@ class BaseAgent(ABC):
     Responsibilities:
     1. Receive broadcast requests
     2. Assess task difficulty (routing)
-    3. Decide bid based on difficulty + game state
+    3. Decide fill/pass based on difficulty + game state
     4. Use tools to solve the task
-    5. Return work + bid to exchange
+    5. Return work to exchange
 
     Subclasses must implement:
     - route_task()         : assess difficulty + choose model
@@ -271,7 +271,7 @@ class BaseAgent(ABC):
     async def handle_broadcast(self, payload: BroadcastPayload) -> dict:
         """Main entry point from AgentProvider.handle().
 
-        Returns: {"bid": float, "work": str} or None to pass.
+        Returns: {"work": str} or None to pass.
         """
         game_state = GameState(
             request_id=payload.request_id,
@@ -290,10 +290,10 @@ class BaseAgent(ABC):
             logger.error(f"[{payload.request_id}] Routing failed: {e}")
             return None  # pass this request
 
-        # Step 2: Decide bid (before solving, so we know our confidence)
-        keep_price = self._compute_bid(route, game_state)
+        # Step 2: Decide fill/pass (before solving, so we know our confidence)
+        keep_price = self.should_fill(route, game_state)
         if keep_price <= 0 or keep_price > game_state.max_price:
-            logger.info(f"[{payload.request_id}] Bid {keep_price} out of range, passing")
+            logger.info(f"[{payload.request_id}] Fill decision: passing on this task")
             return None
 
         # Step 3: Solve the task
@@ -311,9 +311,9 @@ class BaseAgent(ABC):
 
         logger.info(
             f"[{payload.request_id}] Agent {self.agent_id} "
-            f"submitting bid=${keep_price:.4f}"
+            f"filling request"
         )
-        return {"bid": keep_price, "work": work}
+        return {"work": work}
 
     @abstractmethod
     async def route_task(self, game_state: GameState) -> dict:
@@ -476,8 +476,8 @@ class BaseAgent(ABC):
         except Exception as e:
             return f"Tool error: {e}"
 
-    def _compute_bid(self, route: dict, game_state: GameState) -> float:
-        """Compute bid based on route difficulty and game state.
+    def should_fill(self, route: dict, game_state: GameState) -> float:
+        """Fill/pass decision based on route difficulty and game state.
 
         Formula:
             base_bid = max_price * (1 - difficulty_discount)
@@ -485,18 +485,18 @@ class BaseAgent(ABC):
             final_bid = base_bid - urgency_adjustment
 
         Intuition:
-        - Higher difficulty → lower bid (won't compete on hard tasks)
-        - Approaching deadline → higher bid (urgency premium)
+        - Higher difficulty → pass on task (won't compete on hard tasks)
+        - Approaching deadline → higher urgency premium (urgency premium)
         - But never exceed max_price or go below 0
         """
         difficulty = route.get("difficulty", 0.5)
         cost_estimate = route.get("estimated_cost", 0.001)
 
-        # Difficulty discount: hard tasks → we bid lower
+        # Difficulty discount: hard tasks → we pass
         difficulty_discount = difficulty * 0.4  # 0-40% discount
         base_bid = game_state.max_price * (1.0 - difficulty_discount)
 
-        # Urgency adjustment: pressing deadline → we bid higher (cost of rushing)
+        # Urgency adjustment: pressing deadline → we charge more (cost of rushing)
         urgency = game_state.urgency_factor()
         urgency_charge = urgency * game_state.max_price * 0.15  # up to 15% premium
 
@@ -585,7 +585,7 @@ class OpenAIAgent(BaseAgent):
         uses_tools = route["uses_tools"]
 
         base = (
-            "You are a high-quality AI agent competing in a marketplace auction. "
+            "You are a high-quality AI agent competing in a marketplace RFQ market. "
             "Your goal is to produce excellent work efficiently. "
             "Be accurate, clear, and well-structured. "
         )
@@ -736,7 +736,7 @@ class AnthropicAgent(BaseAgent):
 
     def get_system_prompt(self, route: dict) -> str:
         base = (
-            "You are a high-quality AI agent competing in a marketplace auction. "
+            "You are a high-quality AI agent competing in a marketplace RFQ market. "
             "Your goal is to produce excellent work efficiently. "
             "Be accurate, clear, and well-structured. "
         )
@@ -991,7 +991,7 @@ class AgentProvider:
             if result is None:
                 return {"status": "pass"}
 
-            bid = result.get("bid", 0)
+            # RFQ: no bid, fill_price = max_price
             work = result.get("work", "")
 
             # Submit to exchange (unchanged)
@@ -1004,7 +1004,7 @@ class AgentProvider:
 
 **Key insight:** Agents should see ALL game state to make strategic decisions.
 
-Current auction state visible to agent:
+Current RFQ market state visible to agent:
 ```python
 @dataclass
 class GameState:
@@ -1035,8 +1035,8 @@ class CompetitionState:
 ```
 
 This allows agents to:
-- Increase bid if facing heavy competition
-- Decrease bid if others are submitting slow/low-quality
+- Adjust margins if facing heavy competition
+- Adjust margins if others are submitting slow/low-quality
 - Rush submission if another agent is about to win
 
 ---
@@ -1082,29 +1082,29 @@ if __name__ == "__main__":
 |-----------|-----------------|-----------------|
 | **ToolRegistry** | Centralized tool definitions + execution | 1 per agent (shared) |
 | **ToolDefinition** | Schema for one tool | Many (static) |
-| **BaseAgent** | Task routing, bidding, tool-calling loop | 1 per agent |
+| **BaseAgent** | Task routing, fill/pass logic, tool-calling loop | 1 per agent |
 | **OpenAIAgent / AnthropicAgent** | Backend-specific LLM calls | 1 per agent |
 | **AgentProvider** | HTTP server, exchange integration | 1 per agent |
 | **Ledger** | Transaction history | 1 global in exchange |
-| **GameState** | Per-request auction state | 1 per request |
+| **GameState** | Per-request RFQ market state | 1 per request |
 
 ---
 
 ## 8. Design Decisions & Rationale
 
-### 8.1 Bidding Before Solving (vs. After)
+### 8.1 Fill/Pass Decision Before Solving (vs. After)
 
-**Decision:** Bid before solve, but compute difficulty during assessment.
+**Decision:** Fill/pass before solve, but compute difficulty during assessment.
 
 **Rationale:**
 - Exchange needs to make decisions quickly (first-to-qualify wins)
 - Agents can estimate difficulty from task text in O(1) with heuristics
-- If agent wants to be more conservative, it can lower bid based on confidence
-- Solves the game-theory problem: agent doesn't know if it will find a tool/solution, so it commits to a bid based on difficulty estimate
+- If agent wants to be more conservative, it can pass on task based on confidence
+- Solves the game-theory problem: agent doesn't know if it will find a tool/solution, so it commits to a fill/pass decision based on difficulty estimate
 
-Alternative (not taken): Solve first, then bid
-- Problem: Auction times out while agent solves (serial, not parallel)
-- Problem: Agent has already spent compute resources on losing bids
+Alternative (not taken): Solve first, then decide
+- Problem: RFQ Market times out while agent solves (serial, not parallel)
+- Problem: Agent has already spent compute resources on unprofitable tasks
 
 ### 8.2 Tool Registry Shared or Per-Agent?
 
@@ -1148,15 +1148,15 @@ Alternative (possible): Per-agent toolsets
 
 ---
 
-## 10. Bidding Formula (Detailed)
+## 10. Fill/Pass Decision Formula (Detailed)
 
 ```python
-def _compute_bid(route: dict, game_state: GameState) -> float:
+def should_fill(route: dict, game_state: GameState) -> float:
     """
     Three factors:
-    1. Difficulty: hard tasks → lower bid (won't compete)
-    2. Urgency: deadline approaching → higher bid (cost of rushing)
-    3. Cost estimate: never bid below our compute cost
+    1. Difficulty: hard tasks → pass on task (won't compete)
+    2. Urgency: deadline approaching → higher urgency premium (cost of rushing)
+    3. Cost estimate: never fill below our compute cost
 
     Example:
     - max_price=$0.10, difficulty=0.7 (hard), urgency=0.8 (5 sec left)
@@ -1167,11 +1167,11 @@ def _compute_bid(route: dict, game_state: GameState) -> float:
     difficulty = route.get("difficulty", 0.5)
     cost_estimate = route.get("estimated_cost", 0.001)
 
-    # Difficulty discount: hard tasks → we bid lower
+    # Difficulty discount: hard tasks → we pass
     difficulty_discount = difficulty * 0.4
     base_bid = game_state.max_price * (1.0 - difficulty_discount)
 
-    # Urgency adjustment: pressing deadline → we bid higher
+    # Urgency adjustment: pressing deadline → we charge more
     urgency = game_state.urgency_factor()
     urgency_charge = urgency * game_state.max_price * 0.15
 
@@ -1190,7 +1190,7 @@ def _compute_bid(route: dict, game_state: GameState) -> float:
 
 These are real engineering problems but beyond this design:
 
-1. **Persistent agent state** — learning from past auctions (history DB needed)
+1. **Persistent agent state** — learning from past RFQ markets (history DB needed)
 2. **Dynamic pricing** — updating cost estimates as market evolves
 3. **Multi-turn conversations** — agents can't ask buyer for clarification
 4. **Streaming responses** — all tools block until completion
@@ -1235,7 +1235,7 @@ async def test_route_task():
     assert route["uses_tools"] == True, "Should use tools for research"
 
 async def test_bid_computation():
-    """Test that bid accounts for difficulty + urgency."""
+    """Test that fill/pass logic accounts for difficulty + urgency."""
     game_state = GameState(
         request_id="req_123",
         input="simple task",
@@ -1247,17 +1247,17 @@ async def test_bid_computation():
     )
 
     route = {"difficulty": 0.2, "estimated_cost": 0.001, "uses_tools": False}
-    bid = agent._compute_bid(route, game_state)
+    fill = agent.should_fill(route, game_state)
 
-    assert 0 < bid <= 0.10, "Bid should be in range"
-    assert bid > 0.05, "Urgent tasks should have higher bid"
+    assert fill is not None <= 0.10, "Fill decision should be valid"
+    assert fill_price > 0.05, "Urgent tasks should have higher urgency premium"
 ```
 
 ---
 
 ## 13. Conclusion: Why This Design?
 
-✅ **Separation of concerns:** Tool logic, LLM logic, auction logic all separate
+✅ **Separation of concerns:** Tool logic, LLM logic, RFQ market logic all separate
 ✅ **Extensible:** Easy to add new tools, models, agents
 ✅ **Fair:** All agents see same state + have same tools
 ✅ **Efficient:** Agents run in parallel, tools time out, deadline enforced

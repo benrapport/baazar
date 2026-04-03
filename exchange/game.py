@@ -2,9 +2,10 @@
 
 Broadcast full request to ALL agents. Agents submit work.
 Each submission triggers an immediate, concurrent judge evaluation.
-Winner is the earliest-timestamped qualifying submission.
+Winners are the earliest-timestamped qualifying submissions.
 We never declare a winner while earlier submissions are still being judged.
-RFQ model: buyer sets the fill price (max_price). No supply-side bidding.
+RFQ model: buyer sets the fill price (max_price). No supply-side pricing.
+Supports multi-fill: buyer can request N winners via fill_count.
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ import uuid
 import httpx
 
 from bazaar.types import BroadcastPayload, ExchangeResult, LLMConfig
+from exchange.config import ExchangeDefaults
 from exchange.judge import Judge
 from exchange.market_log import MarketLog, MarketLogStore
 from exchange.registry import Registry
@@ -24,8 +26,8 @@ from exchange.types import GameState, RegisteredAgent, Submission
 
 logger = logging.getLogger(__name__)
 
-HARD_TIMEOUT = 60.0
-CHECK_INTERVAL = 0.025  # 25ms
+HARD_TIMEOUT = ExchangeDefaults.HARD_TIMEOUT
+CHECK_INTERVAL = ExchangeDefaults.CHECK_INTERVAL
 
 
 async def run_game(
@@ -41,13 +43,15 @@ async def run_game(
     state: GameState | None = None,
     llm_config: LLMConfig | None = None,
     market_log_store: MarketLogStore | None = None,
-) -> ExchangeResult:
-    """Run a full game for one buyer request."""
+    fill_count: int = 1,
+) -> list[ExchangeResult]:
+    """Run a full game for one buyer request. Returns list of winners."""
 
     if max_price <= 0:
         raise ValueError("max_price must be positive")
     min_quality = max(1, min(10, min_quality))
     timeout = max(1.0, timeout)
+    fill_count = max(1, fill_count)
 
     agents = registry.get_active_agents()
     if not agents:
@@ -62,6 +66,7 @@ async def run_game(
             quality_criteria=quality_criteria or [],
             buyer_id=buyer_id,
             timeout=timeout,
+            fill_count=fill_count,
         )
 
     request_id = state.request_id
@@ -79,7 +84,7 @@ async def run_game(
         opened_at=state.start_time,
     )
     state.market_log = mlog
-    mlog.emit("market_opened", timeout=timeout)
+    mlog.emit("market_opened", timeout=timeout, fill_count=fill_count)
 
     llm = llm_config
     payload = BroadcastPayload(
@@ -94,15 +99,16 @@ async def run_game(
         max_price=max_price,
         min_quality=min_quality,
         quality_criteria=quality_criteria or [],
+        fill_count=fill_count,
         deadline_unix=deadline,
     )
 
-    logger.info(f"[{request_id}] Broadcasting to {len(agents)} agents")
+    logger.info(f"[{request_id}] Broadcasting to {len(agents)} agents (fill_count={fill_count})")
     await _broadcast(payload, agents, deadline, mlog)
 
-    result = await _wait_for_winner(state, judge, deadline)
+    results = await _wait_for_winners(state, judge, deadline)
 
-    if result is None:
+    if not results:
         mlog.emit(
             "market_timeout",
             submissions_received=len(state.submissions),
@@ -116,45 +122,48 @@ async def run_game(
             f"({len(state.submissions)} submissions received)"
         )
 
-    winner_sub = state.submissions[result.agent_id]
-    tx = ledger.record(
-        request_id=request_id,
-        buyer_id=buyer_id,
-        agent_id=result.agent_id,
-        price=max_price,
-        score=winner_sub.score,
-        latency_ms=result.latency_ms,
-    )
+    # Settle each winner
+    for result in results:
+        winner_sub = state.submissions[result.agent_id]
+        tx = ledger.record(
+            request_id=request_id,
+            buyer_id=buyer_id,
+            agent_id=result.agent_id,
+            price=max_price,
+            score=winner_sub.score,
+            latency_ms=result.latency_ms,
+        )
 
-    mlog.emit(
-        "winner_selected",
-        agent_id=result.agent_id,
-        fill_price=max_price,
-        score=winner_sub.score,
-        latency_ms=result.latency_ms,
-        reason="earliest qualifying submission",
-    )
-    mlog.emit(
-        "market_settled",
-        tx_id=tx.tx_id,
-        agent_id=result.agent_id,
-        fill_price=max_price,
-        exchange_fee=tx.exchange_fee,
-        buyer_charged=tx.buyer_charged,
-    )
-    mlog.winner = result.agent_id
+        mlog.emit(
+            "winner_selected",
+            agent_id=result.agent_id,
+            fill_price=max_price,
+            score=winner_sub.score,
+            latency_ms=result.latency_ms,
+            reason="earliest qualifying submission",
+        )
+        mlog.emit(
+            "market_settled",
+            tx_id=tx.tx_id,
+            agent_id=result.agent_id,
+            fill_price=max_price,
+            exchange_fee=tx.exchange_fee,
+            buyer_charged=tx.buyer_charged,
+        )
+
+        logger.info(
+            f"[{request_id}] Winner: {result.agent_id} @ ${max_price:.4f} "
+            f"(score {winner_sub.score}/10, fee ${tx.exchange_fee:.4f})"
+        )
+        result.request_id = request_id
+
+    mlog.winner = results[0].agent_id  # primary winner for backward compat
     mlog.closed_at = time.time()
 
     if market_log_store:
         market_log_store.store(mlog)
 
-    logger.info(
-        f"[{request_id}] Winner: {result.agent_id} @ ${max_price:.4f} "
-        f"(score {winner_sub.score}/10, fee ${tx.exchange_fee:.4f})"
-    )
-
-    result.request_id = request_id
-    return result
+    return results
 
 
 # ── Broadcast ─────────────────────────────────────────────────────────
@@ -195,21 +204,24 @@ async def _send_to_agent(client: httpx.AsyncClient,
 
 # ── Concurrent Judge ──────────────────────────────────────────────────
 
-async def _wait_for_winner(state: GameState, judge: Judge,
-                           deadline: float) -> ExchangeResult | None:
-    """Spawn a judge task per submission. Pick winner by arrival time.
+async def _wait_for_winners(state: GameState, judge: Judge,
+                            deadline: float) -> list[ExchangeResult]:
+    """Spawn a judge task per submission. Collect up to fill_count winners.
 
     Rules:
     - Each submission gets its own concurrent judge task
     - Judges only SCORE — they don't pick winners
     - The main loop (every 25ms) checks scored submissions
-    - Winner = earliest-timestamped submission that qualifies
+    - Winners = earliest-timestamped submissions that qualify (in order)
     - We NEVER declare a winner while an earlier submission is still being judged
+    - Each agent can win at most once
     """
     scored_versions: dict[str, int] = {}  # agent_id -> revision we sent to judge
     judging: set[str] = set()             # agent_ids currently being judged
     judge_tasks: list[asyncio.Task] = []
     mlog = state.market_log
+    collected: list[ExchangeResult] = []
+    collected_ids: set[str] = set()
 
     async def _score_one(agent_id: str, sub: Submission):
         """Score a submission. Only writes score — does NOT pick winner."""
@@ -260,13 +272,13 @@ async def _wait_for_winner(state: GameState, judge: Judge,
                 task = asyncio.create_task(_score_one(agent_id, sub))
                 judge_tasks.append(task)
 
-        # Check for winner among scored submissions
-        # Only consider if NO earlier-timestamped submission is still being judged
+        # Check for winners among scored submissions (not yet collected)
         with state.lock:
             qualifiers = [
                 (aid, sub) for aid, sub in state.submissions.items()
                 if sub.score is not None
                 and sub.score >= state.min_quality
+                and aid not in collected_ids
             ]
 
         if qualifiers:
@@ -275,29 +287,37 @@ async def _wait_for_winner(state: GameState, judge: Judge,
             best_aid, best_sub = qualifiers[0]
 
             # Is there an unscored submission that arrived EARLIER than our best?
-            # If so, wait — it might qualify and beat our current best.
+            # Exclude already-collected agents from this check.
             earlier_unscored = any(
-                sub.score is None and sub.timestamp < best_sub.timestamp
+                sub.score is None
+                and sub.timestamp < best_sub.timestamp
+                and sub.agent_id not in collected_ids
                 for sub in subs_snapshot.values()
             )
 
             if not earlier_unscored:
-                with state.lock:
-                    if not state.done:
-                        state.winner = best_aid
-                        state.done = True
-                return ExchangeResult(
+                result = ExchangeResult(
                     output=best_sub.work,
                     agent_id=best_aid,
                     price=state.max_price,
                     latency_ms=(time.time() - state.start_time) * 1000,
                     score=best_sub.score,
                 )
+                collected.append(result)
+                collected_ids.add(best_aid)
 
-    # Deadline passed — no qualifier found. Order not filled.
-    with state.lock:
-        state.done = True
-    return None
+                with state.lock:
+                    state.winners.append(best_aid)
+                    if not state.winner:
+                        state.winner = best_aid  # first winner
+                    if len(collected) >= state.fill_count:
+                        state.done = True
+
+    if not state.done:
+        with state.lock:
+            state.done = True
+
+    return collected
 
 
 # ── Helpers (used by tests + external callers) ────────────────────────
@@ -337,7 +357,7 @@ def receive_submission(state: GameState, agent_id: str,
                        work: str) -> bool:
     """Called when an agent POSTs a submission. Returns True if accepted.
 
-    RFQ model: no bid — buyer's max_price is the fill price.
+    RFQ model: buyer's max_price is the fill price. No supply-side pricing.
     """
     mlog = state.market_log
 

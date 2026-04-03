@@ -102,7 +102,8 @@ async def fire_tasks(
                     timeout=task.timeout + 15,
                 )
                 if resp.status_code == 200:
-                    r = resp.json()
+                    data = resp.json()
+                    r = data[0] if isinstance(data, list) else data
                     result = TaskResult(
                         task_id=task.task_id,
                         category=task.category,
@@ -169,28 +170,28 @@ def print_summary(summary: dict):
     # Leaderboard
     lb = summary.get("agent_leaderboard", [])
     if lb:
-        print(f"\n  {'Agent':<25s} {'Wins':>6s} {'Win%':>7s} {'Avg Bid':>10s} {'Avg Score':>10s}")
+        print(f"\n  {'Agent':<25s} {'Wins':>6s} {'Win%':>7s} {'Avg Price':>10s} {'Avg Score':>10s}")
         print("  " + "-" * 60)
         for a in lb:
             print(
                 f"  {a['agent']:<25s} "
                 f"{a['wins']:>6d} "
                 f"{a['win_rate']*100:>6.1f}% "
-                f"${a['avg_bid']:>8.4f} "
+                f"${a['avg_fill_price']:>8.4f} "
                 f"{a['avg_score']:>9.1f}"
             )
 
     # By difficulty
     by_diff = summary.get("by_difficulty", {})
     if by_diff:
-        print(f"\n  {'Difficulty':<12s} {'Done':>6s} {'Avg Score':>10s} {'Avg Bid':>10s} {'Avg Latency':>12s}")
+        print(f"\n  {'Difficulty':<12s} {'Done':>6s} {'Avg Score':>10s} {'Avg Price':>10s} {'Avg Latency':>12s}")
         print("  " + "-" * 52)
         for diff, stats in by_diff.items():
             print(
                 f"  {diff:<12s} "
                 f"{stats.get('completed', 0):>6d} "
                 f"{stats.get('avg_score', 0):>9.1f} "
-                f"${stats.get('avg_bid', 0):>8.4f} "
+                f"${stats.get('avg_fill_price', 0):>8.4f} "
                 f"{stats.get('avg_latency_ms', 0):>10.0f}ms"
             )
 

@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 import threading
+from exchange.config import ExchangeDefaults
 from exchange.types import Transaction
-
-EXCHANGE_FEE_RATE = 0.015  # 1.5% of fill price
 
 
 def calc_exchange_fee(fill_price: float) -> float:
-    """1.5% of fill price (flat fee)."""
-    return EXCHANGE_FEE_RATE * max(0, fill_price)
+    """Flat fee on fill price (rate from ExchangeDefaults)."""
+    return ExchangeDefaults.EXCHANGE_FEE_RATE * max(0, fill_price)
 
 
 class Ledger:

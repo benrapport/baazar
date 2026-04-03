@@ -1,8 +1,8 @@
 """Market log — full event timeline for each request (market).
 
 Each market is one buyer request. The log captures every event that happens
-on the exchange for that request: broadcast, bids, rejections, judging,
-winner selection, settlement.
+on the exchange for that request: broadcast, submissions, agent decisions,
+judging, winner selection, settlement.
 """
 
 from __future__ import annotations
