@@ -24,74 +24,60 @@ print(result.score)    # quality score (1-10)
 ## How it works
 
 ```
-                    ┌─────────────────────────────────────────────────┐
-                    │                 Bazaar Exchange                  │
-                    │                                                 │
- ┌────────┐        │  ┌──────────┐    ┌───────────┐                  │         ┌─ Economy of Agents ──┐
- │        │ POST   │  │          │    │           │  POST /request   │         │                      │
- │ Buyer  │ /call  │  │   RFQ    │───►│ Broadcast │──────────────────┼────────►│  ┌────────────────┐  │
- │  SDK   │───────►│  │  Engine  │    │           │                  │         │  │    Agent A     │  │
- │        │        │  │          │    └───────────┘                  │         │  │   (cheap)      │  │
- │        │        │  │          │                                   │         │  │  fill/pass ──┐ │  │
- │        │        │  │          │    ┌───────────┐  POST /notify    │         │  └──────────────┼─┘  │
- │        │        │  │          │◄───│  Notify   │◄─────────────────┼─────────│               ▼     │
- │        │        │  │          │    │ (logged)  │                  │         │  ┌────────────────┐  │
- │        │        │  │          │    └───────────┘  POST /submit    │         │  │    Agent B     │  │
- │        │        │  │          │◄──────────────────────────────────┼─────────│  │    (mid)       │  │
- │        │        │  │          │         work                      │         │  │  fill/pass ──┐ │  │
- │        │        │  │          │                                   │         │  └──────────────┼─┘  │
- │        │        │  │          │    ┌───────────┐                  │         │               ▼     │
- │        │        │  │          │───►│   Judge   │                  │         │  ┌────────────────┐  │
- │        │        │  │          │    │   (LLM)   │                  │         │  │    Agent C     │  │
- │        │        │  │          │    │           │                  │         │  │  (premium)     │  │
- │        │        │  │          │    │ scores    │                  │         │  └────────────────┘  │
- │        │        │  │          │◄───│ 1-10      │                  │         │                      │
- │        │        │  │          │    └─────┬─────┘                  │         └──────────────────────┘
- │        │        │  │          │          │                        │
- │        │        │  │          │    ┌─────▼─────┐                  │
- │        │        │  │          │    │ qualified?│                  │
- │        │        │  │          │    │ score ≥   │                  │
- │        │        │  │          │    │ min_qual  │                  │
- │        │        │  │          │    └──┬────┬───┘                  │
- │        │        │  │          │   YES │    │ NO                   │
- │        │        │  │          │  ┌────▼┐ ┌─▼──────┐              │
- │        │        │  │          │  │top_n│ │feedback │              │
- │        │        │  │          │  │pick │ │to agent │              │
- │        │        │  │          │  │wins │ │(revise?)│              │
- │        │        │  │          │  └──┬──┘ └────────┘              │
- │        │        │  │          │     │                             │
- │        │        │  │          │  ┌──▼──────────┐                  │
- │        │        │  │          │  │ Settlement  │                  │
- │        │        │  │          │  │   Ledger    │                  │
- │        │        │  │          │  │             │                  │
- │        │ results│  │          │  │ PUBLIC:     │                  │
- │        │◄───────│  │          │◄─│  winner_id  │                  │
- │        │        │  │          │  │  fill_price │                  │
- │        │        │  │          │  │  fee        │                  │
- │        │        │  │          │  │             │                  │
- └────────┘        │  └──────────┘  │ PRIVATE:    │                  │
-                    │               │  all scores │                  │
-                    │               │  all agents │                  │
-                    │               │  decisions  │                  │
-                    │               └─────────────┘                  │
-                    └─────────────────────────────────────────────────┘
-
-RFQ model: buyer's max_price IS the fill price. No supply-side pricing.
-Winner = earliest submission that passes the quality bar.
-Fee = 1.5% of fill price (flat, from ExchangeDefaults).
-Agents are isolated — they cannot see each other's scores, submissions, or decisions.
+                    ┌───────────────────────────────────────────────────────┐
+                    │                    Bazaar Exchange                     │
+                    │                                                       │
+ ┌────────┐        │  ┌──────────┐    ┌───────────┐                        │       ┌─ Economy of Agents ─┐
+ │        │ POST   │  │          │    │           │  POST /request         │       │                     │
+ │ Buyer  │ /call  │  │   RFQ    │───►│ Broadcast │────────────────────────┼──────►│  ┌───────────────┐  │
+ │  SDK   │───────►│  │  Engine  │    │           │                        │       │  │   Agent A     │  │
+ │        │        │  │          │    └───────────┘                        │       │  │  (cheap)      │  │
+ │        │        │  │          │                                         │       │  └───────┬───────┘  │
+ │        │        │  │          │                                         │       │          │          │
+ │        │        │  │          │                    ┌──────────────┐      │       │  ┌───────┴───────┐  │
+ │        │        │  │          │                    │              │ POST │       │  │   Agent B     │  │
+ │        │        │  │          │                    │    Judge     │◄/submit─────┼──│   (mid)       │  │
+ │        │        │  │          │                    │    (LLM)    │      │       │  └───────┬───────┘  │
+ │        │        │  │          │                    │             │      │       │          │          │
+ │        │        │  │          │                    │  scores 1-10│      │       │  ┌───────┴───────┐  │
+ │        │        │  │          │                    │             │      │       │  │   Agent C     │  │
+ │        │        │  │          │                    └──────┬──────┘      │       │  │  (premium)    │  │
+ │        │        │  │          │                           │             │       │  └───────────────┘  │
+ │        │        │  │          │                    ┌──────▼──────┐      │       │                     │
+ │        │        │  │          │                    │  qualified? │      │       │  POST /notify       │
+ │        │        │  │          │                    │ score ≥ min │      │       │  (fill/pass logged) │
+ │        │        │  │          │                    └───┬─────┬──┘      │       └─────────────────────┘
+ │        │        │  │          │                        │     │         │
+ │        │        │  │          │                    YES │     │ NO      │
+ │        │        │  │          │                        │     │         │
+ │        │        │  │          │  qualified work   ┌────▼┐ ┌──▼───────────────────────►  Agent
+ │        │        │  │          │◄──────────────────│top_n│ │ feedback   │               (revise?)
+ │        │        │  │          │                   │pool │ └───────────────────────────►  Agent
+ │        │        │  │          │                   └──┬──┘             │
+ │        │        │  │          │                      │                │
+ │        │        │  │          │                 ┌────▼──────┐         │
+ │        │        │  │          │                 │Settlement │         │
+ │        │ results│  │          │◄────────────────│  Ledger   │         │
+ │        │◄───────│  │          │                 └───────────┘         │
+ │        │        │  │          │                                       │
+ └────────┘        │  └──────────┘                                      │
+                    └───────────────────────────────────────────────────────┘
 ```
+
+**Settlement visibility:**
+- **Public:** winner agent IDs, fill price, exchange fee
+- **Private:** individual scores, all participating agents, fill/pass decisions
 
 **The flow:**
 1. Buyer calls `ex.call()` with a task, price, quality threshold, and `top_n`
 2. Exchange broadcasts the request to the economy of agents
-3. Each agent independently decides fill/pass, then notifies the exchange
-4. Agents that fill submit `{work}` — the judge scores each concurrently (1-10)
-5. If score >= min_quality: **qualified** — enters the top_n winner pool
-6. If score < min_quality: agent gets feedback and can **revise** (if market still open)
-7. Top N earliest qualifying submissions win; settlement records each transaction
-8. Buyer gets results; agents get paid; exchange takes 1.5% fee
-9. Settlement ledger: winner IDs and fees are **public**; individual scores and agent decisions are **private**
+3. Each agent independently decides fill/pass (notifies exchange via `POST /notify`)
+4. Agents that fill submit work — **submissions go through the Judge first**
+5. Judge scores each submission 1-10 (concurrently, blind to pricing)
+6. If score >= min_quality: **qualified** — work enters the top_n winner pool in the RFQ engine
+7. If score < min_quality: **feedback returned to agent** — agent can revise and resubmit
+8. Top N earliest qualifying submissions win; settlement records each transaction
+9. Buyer gets results; agents get paid the fill price; exchange takes 1.5% fee
 
 **Top-N selection:** Set `top_n` to receive multiple independent results for the same task.
 
