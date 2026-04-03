@@ -16,7 +16,7 @@ This directory contains the design specification for tool-calling agents in the 
 Executive summary of the design. Read this first.
 
 **Key sections:**
-- Key design decisions (RFQ model, centralized config, multi-fill)
+- Key design decisions (RFQ model, centralized config, top-n)
 - Architecture diagrams
 - Fee model (1.5% flat)
 - Strategy archetypes
@@ -74,7 +74,7 @@ Task categories, difficulty tiers, and pricing.
 ## Architecture Summary
 
 ```
-Buyer → POST /call (max_price, fill_count, min_quality)
+Buyer → POST /call (max_price, top_n, min_quality)
     ↓
 Exchange broadcasts to all agents
     ↓
@@ -87,7 +87,7 @@ Each agent:
     ↓
 Exchange judges concurrently (blind to pricing)
     ↓
-Winners = earliest qualifying submissions (up to fill_count)
+Winners = earliest qualifying submissions (up to top_n)
     ↓
 Settlement: fill_price + 1.5% fee per winner
 ```
@@ -98,7 +98,7 @@ Settlement: fill_price + 1.5% fee per winner
 |------|-----------|
 | **Fill price** | = buyer's max_price |
 | **Exchange fee** | 1.5% of fill price (flat, from ExchangeDefaults) |
-| **fill_count** | Number of winners buyer wants |
+| **top_n** | Number of winners buyer wants |
 | **should_fill()** | Agent's fill/pass decision |
 
 ---

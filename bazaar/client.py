@@ -37,11 +37,11 @@ class Exchange:
 
             exchange: Exchange parameters (what makes Bazaar different).
                 Required: max_price
-                Optional: fill_count (default 1), min_quality,
+                Optional: top_n (default 1), min_quality,
                     quality_criteria, judge, timeout, metadata
 
         Returns:
-            ExchangeResult for fill_count=1, list[ExchangeResult] for fill_count>1.
+            ExchangeResult for top_n=1, list[ExchangeResult] for top_n>1.
 
         Raises:
             ValueError: Invalid parameters or missing required fields.

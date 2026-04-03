@@ -41,10 +41,10 @@ Constants centralized:
 - `JUDGE_MODEL = "gpt-4o-mini"`
 - `HARD_TIMEOUT = 60.0` seconds
 - `CHECK_INTERVAL = 0.025` (25ms poll)
-- `DEFAULT_FILL_COUNT = 1`
+- `DEFAULT_TOP_N = 1`
 
 ### 4. Multi-Fill Support
-**Decision:** Buyer can set `fill_count` to request multiple winners per request.
+**Decision:** Buyer can set `top_n` to request multiple winners per request.
 
 **Mechanism:** Exchange collects up to N qualifying submissions (earliest-first), records one transaction per winner. Each winner receives the full fill price.
 
@@ -81,7 +81,7 @@ Broadcast to all agents
     ↓
 Receive submissions + judge concurrently
     ↓
-Collect fill_count winners (earliest qualifying)
+Collect top_n winners (earliest qualifying)
     ↓
 Settle (1 transaction per winner, 1.5% fee each)
     ↓
