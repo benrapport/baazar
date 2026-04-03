@@ -50,7 +50,7 @@ class ExchangeConfig(BaseModel):
     judge selection, and deadlines.
     """
     max_price: float = Field(..., gt=0)  # USD — the fill price per winner
-    fill_count: int = Field(1, ge=1)  # how many winners to collect
+    top_n: int = Field(1, ge=1)  # how many winners to collect
     judge: JudgeConfig = Field(default_factory=JudgeConfig)
     timeout: float = Field(30.0, gt=0, le=3600)  # seconds
     metadata: dict = {}
@@ -114,5 +114,5 @@ class BroadcastPayload(BaseModel):
     max_price: float  # USD
     min_quality: int
     quality_criteria: list[str] = []
-    fill_count: int = 1  # how many winners — agents can see available slots
+    top_n: int = 1  # how many winners — agents can see available slots
     deadline_unix: float = 0.0

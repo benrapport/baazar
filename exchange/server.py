@@ -90,7 +90,7 @@ async def call_exchange(
 
     llm = req.llm
     exc = req.exchange
-    fill_count = exc.fill_count
+    top_n = exc.top_n
 
     # Create game state so agents can submit while game runs
     request_id = f"req_{uuid.uuid4().hex[:12]}"
@@ -101,7 +101,7 @@ async def call_exchange(
         min_quality=exc.judge.min_quality,
         quality_criteria=exc.judge.criteria,
         buyer_id=buyer_id,
-        fill_count=fill_count,
+        top_n=top_n,
     )
     with _games_lock:
         active_games[request_id] = state
@@ -120,7 +120,7 @@ async def call_exchange(
             state=state,
             llm_config=llm,
             market_log_store=market_log_store,
-            fill_count=fill_count,
+            top_n=top_n,
         )
     except ValueError as e:
         raise HTTPException(404, str(e))

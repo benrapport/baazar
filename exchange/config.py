@@ -22,5 +22,5 @@ class ExchangeDefaults:
     # Judge
     JUDGE_MODEL: str = "gpt-4o-mini"
 
-    # Multi-fill
-    DEFAULT_FILL_COUNT: int = 1  # how many winners per request
+    # Top-N selection
+    DEFAULT_TOP_N: int = 1  # how many winners per request

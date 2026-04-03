@@ -14,7 +14,7 @@ class BroadcastPayload:
     input: str
     max_price: float      # the fill price
     min_quality: int
-    fill_count: int       # how many winners buyer wants
+    top_n: int       # how many winners buyer wants
     deadline_unix: float
     quality_criteria: list[str]
 
@@ -200,7 +200,7 @@ sim/
 2. **Speed wins** — earliest qualifying submission wins
 3. **Agent isolation** — you can't see competitors
 4. **Blind judging** — judge doesn't know the fill price
-5. **Multi-fill** — check `fill_count` for more winning slots
+5. **Top-N selection** — check `top_n` for more winning slots
 
 ---
 

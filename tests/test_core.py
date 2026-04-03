@@ -27,14 +27,14 @@ def test_call_request_defaults():
     )
     assert r.exchange.judge.min_quality == 6
     assert r.exchange.timeout == 30.0
-    assert r.exchange.fill_count == 1
+    assert r.exchange.top_n == 1
 
-def test_call_request_fill_count():
+def test_call_request_top_n():
     r = CallRequest(
         llm=LLMConfig(input="img"),
-        exchange=ExchangeConfig(max_price=5.0, fill_count=3),
+        exchange=ExchangeConfig(max_price=5.0, top_n=3),
     )
-    assert r.exchange.fill_count == 3
+    assert r.exchange.top_n == 3
 
 def test_submission():
     s = Submission(agent_id="a1", request_id="r1", work="done")
@@ -47,14 +47,14 @@ def test_game_state():
     assert g.winner is None
     assert g.done is False
     assert g.quality_criteria == []
-    assert g.fill_count == 1
+    assert g.top_n == 1
     assert g.winners == []
 
 def test_game_state_multi_fill():
     g = GameState(request_id="r1", input="img",
                   max_price=5.0, min_quality=7, buyer_id="b1",
-                  fill_count=3)
-    assert g.fill_count == 3
+                  top_n=3)
+    assert g.top_n == 3
 
 
 # ── Centralized Config ────────────────────────────────────────────────
@@ -68,7 +68,7 @@ def test_exchange_config_defaults():
     assert ExchangeDefaults.DEFAULT_TIMEOUT == 30.0
     assert ExchangeDefaults.DEFAULT_MIN_QUALITY == 6
     assert ExchangeDefaults.JUDGE_MODEL == "gpt-4o-mini"
-    assert ExchangeDefaults.DEFAULT_FILL_COUNT == 1
+    assert ExchangeDefaults.DEFAULT_TOP_N == 1
 
 
 # ── Registry ──────────────────────────────────────────────────────────
@@ -233,12 +233,12 @@ def test_select_winner_picks_earliest_timestamp():
     assert result.price == 5.0  # fill price = max_price
 
 
-def test_broadcast_payload_includes_fill_count():
+def test_broadcast_payload_includes_top_n():
     p = BroadcastPayload(
         request_id="r1", input="test", max_price=1.0,
-        min_quality=6, fill_count=3, deadline_unix=100.0,
+        min_quality=6, top_n=3, deadline_unix=100.0,
     )
-    assert p.fill_count == 3
+    assert p.top_n == 3
 
 def test_broadcast_payload_no_agent_info():
     """Broadcast must NOT contain any agent-identifying information."""

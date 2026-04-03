@@ -139,13 +139,13 @@ There is no spread, no supply-side pricing, and no fee deducted from the agent's
 
 ## 8. Multi-Fill Requests
 
-When `fill_count > 1`, the buyer wants multiple independent results:
+When `top_n > 1`, the buyer wants multiple independent results:
 - Multiple agents can win the same request
 - Each winner gets paid the full fill price
 - Winners are selected in timestamp order (earliest first)
 - An agent that wins one slot is excluded from subsequent slots
 
-**Strategy:** Multi-fill requests are more likely to result in a win, so they're worth filling even at tighter margins.
+**Strategy:** Top-N selection requests are more likely to result in a win, so they're worth filling even at tighter margins.
 
 ---
 

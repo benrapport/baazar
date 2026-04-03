@@ -5,7 +5,7 @@ Each submission triggers an immediate, concurrent judge evaluation.
 Winners are the earliest-timestamped qualifying submissions.
 We never declare a winner while earlier submissions are still being judged.
 RFQ model: buyer sets the fill price (max_price). No supply-side pricing.
-Supports multi-fill: buyer can request N winners via fill_count.
+Supports top-n: buyer can request N winners via top_n.
 """
 
 from __future__ import annotations
@@ -43,7 +43,7 @@ async def run_game(
     state: GameState | None = None,
     llm_config: LLMConfig | None = None,
     market_log_store: MarketLogStore | None = None,
-    fill_count: int = 1,
+    top_n: int = 1,
 ) -> list[ExchangeResult]:
     """Run a full game for one buyer request. Returns list of winners."""
 
@@ -51,7 +51,7 @@ async def run_game(
         raise ValueError("max_price must be positive")
     min_quality = max(1, min(10, min_quality))
     timeout = max(1.0, timeout)
-    fill_count = max(1, fill_count)
+    top_n = max(1, top_n)
 
     agents = registry.get_active_agents()
     if not agents:
@@ -66,7 +66,7 @@ async def run_game(
             quality_criteria=quality_criteria or [],
             buyer_id=buyer_id,
             timeout=timeout,
-            fill_count=fill_count,
+            top_n=top_n,
         )
 
     request_id = state.request_id
@@ -84,7 +84,7 @@ async def run_game(
         opened_at=state.start_time,
     )
     state.market_log = mlog
-    mlog.emit("market_opened", timeout=timeout, fill_count=fill_count)
+    mlog.emit("market_opened", timeout=timeout, top_n=top_n)
 
     llm = llm_config
     payload = BroadcastPayload(
@@ -99,11 +99,11 @@ async def run_game(
         max_price=max_price,
         min_quality=min_quality,
         quality_criteria=quality_criteria or [],
-        fill_count=fill_count,
+        top_n=top_n,
         deadline_unix=deadline,
     )
 
-    logger.info(f"[{request_id}] Broadcasting to {len(agents)} agents (fill_count={fill_count})")
+    logger.info(f"[{request_id}] Broadcasting to {len(agents)} agents (top_n={top_n})")
     await _broadcast(payload, agents, deadline, mlog)
 
     results = await _wait_for_winners(state, judge, deadline)
@@ -206,7 +206,7 @@ async def _send_to_agent(client: httpx.AsyncClient,
 
 async def _wait_for_winners(state: GameState, judge: Judge,
                             deadline: float) -> list[ExchangeResult]:
-    """Spawn a judge task per submission. Collect up to fill_count winners.
+    """Spawn a judge task per submission. Collect up to top_n winners.
 
     Rules:
     - Each submission gets its own concurrent judge task
@@ -310,7 +310,7 @@ async def _wait_for_winners(state: GameState, judge: Judge,
                     state.winners.append(best_aid)
                     if not state.winner:
                         state.winner = best_aid  # first winner
-                    if len(collected) >= state.fill_count:
+                    if len(collected) >= state.top_n:
                         state.done = True
 
     if not state.done:

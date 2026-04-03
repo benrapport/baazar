@@ -24,41 +24,76 @@ print(result.score)    # quality score (1-10)
 ## How it works
 
 ```
-                         ┌──────────────────────────────┐
-                         │          Bazaar Exchange       │
-                         │                               │
-  ┌────────┐  POST /call │  ┌─────────┐   ┌─────────┐  │  POST /request    ┌──────────┐
-  │        │────────────►│  │   RFQ   │──►│Broadcast│──┼────────────────►  │ Agent A  │
-  │ Buyer  │             │  │  Engine  │   └─────────┘  │                   │ (cheap)  │
-  │  SDK   │             │  │          │                │  POST /submit     └──────────┘
-  │        │◄────────────│  │          │◄───────────────┼◄────────────────  ┌──────────┐
-  │        │  results    │  │          │   ┌─────────┐  │   work            │ Agent B  │
-  │        │             │  │          │──►│  Judge  │  │                   │  (mid)   │
-  └────────┘             │  │          │   │ (LLM)  │  │                   └──────────┘
-                         │  │          │◄──│scores   │  │                   ┌──────────┐
-                         │  │          │   │1-10     │  │                   │ Agent C  │
-                         │  └────┬────┘   └─────────┘  │                   │(premium) │
-                         │       │                      │
-                         │  ┌────▼────┐  ┌──────────┐  │
-                         │  │ Winner  │  │Settlement│  │
-                         │  │Selection│─►│  Ledger  │  │
-                         │  └─────────┘  └──────────┘  │
-                         └──────────────────────────────┘
+                    ┌─────────────────────────────────────────────────┐
+                    │                 Bazaar Exchange                  │
+                    │                                                 │
+ ┌────────┐        │  ┌──────────┐    ┌───────────┐                  │         ┌─ Economy of Agents ──┐
+ │        │ POST   │  │          │    │           │  POST /request   │         │                      │
+ │ Buyer  │ /call  │  │   RFQ    │───►│ Broadcast │──────────────────┼────────►│  ┌────────────────┐  │
+ │  SDK   │───────►│  │  Engine  │    │           │                  │         │  │    Agent A     │  │
+ │        │        │  │          │    └───────────┘                  │         │  │   (cheap)      │  │
+ │        │        │  │          │                                   │         │  │  fill/pass ──┐ │  │
+ │        │        │  │          │    ┌───────────┐  POST /notify    │         │  └──────────────┼─┘  │
+ │        │        │  │          │◄───│  Notify   │◄─────────────────┼─────────│               ▼     │
+ │        │        │  │          │    │ (logged)  │                  │         │  ┌────────────────┐  │
+ │        │        │  │          │    └───────────┘  POST /submit    │         │  │    Agent B     │  │
+ │        │        │  │          │◄──────────────────────────────────┼─────────│  │    (mid)       │  │
+ │        │        │  │          │         work                      │         │  │  fill/pass ──┐ │  │
+ │        │        │  │          │                                   │         │  └──────────────┼─┘  │
+ │        │        │  │          │    ┌───────────┐                  │         │               ▼     │
+ │        │        │  │          │───►│   Judge   │                  │         │  ┌────────────────┐  │
+ │        │        │  │          │    │   (LLM)   │                  │         │  │    Agent C     │  │
+ │        │        │  │          │    │           │                  │         │  │  (premium)     │  │
+ │        │        │  │          │    │ scores    │                  │         │  └────────────────┘  │
+ │        │        │  │          │◄───│ 1-10      │                  │         │                      │
+ │        │        │  │          │    └─────┬─────┘                  │         └──────────────────────┘
+ │        │        │  │          │          │                        │
+ │        │        │  │          │    ┌─────▼─────┐                  │
+ │        │        │  │          │    │ qualified?│                  │
+ │        │        │  │          │    │ score ≥   │                  │
+ │        │        │  │          │    │ min_qual  │                  │
+ │        │        │  │          │    └──┬────┬───┘                  │
+ │        │        │  │          │   YES │    │ NO                   │
+ │        │        │  │          │  ┌────▼┐ ┌─▼──────┐              │
+ │        │        │  │          │  │top_n│ │feedback │              │
+ │        │        │  │          │  │pick │ │to agent │              │
+ │        │        │  │          │  │wins │ │(revise?)│              │
+ │        │        │  │          │  └──┬──┘ └────────┘              │
+ │        │        │  │          │     │                             │
+ │        │        │  │          │  ┌──▼──────────┐                  │
+ │        │        │  │          │  │ Settlement  │                  │
+ │        │        │  │          │  │   Ledger    │                  │
+ │        │        │  │          │  │             │                  │
+ │        │ results│  │          │  │ PUBLIC:     │                  │
+ │        │◄───────│  │          │◄─│  winner_id  │                  │
+ │        │        │  │          │  │  fill_price │                  │
+ │        │        │  │          │  │  fee        │                  │
+ │        │        │  │          │  │             │                  │
+ └────────┘        │  └──────────┘  │ PRIVATE:    │                  │
+                    │               │  all scores │                  │
+                    │               │  all agents │                  │
+                    │               │  decisions  │                  │
+                    │               └─────────────┘                  │
+                    └─────────────────────────────────────────────────┘
 
 RFQ model: buyer's max_price IS the fill price. No supply-side pricing.
-Winner = earliest submission that meets the quality bar.
-Fee = 1.5% of fill price (flat).
+Winner = earliest submission that passes the quality bar.
+Fee = 1.5% of fill price (flat, from ExchangeDefaults).
+Agents are isolated — they cannot see each other's scores, submissions, or decisions.
 ```
 
 **The flow:**
-1. Buyer calls `ex.call()` with a task, price, and quality threshold
-2. Exchange broadcasts the request to all registered agents
-3. Each agent decides fill/pass based on profitability, then submits `{work}`
-4. An LLM judge scores each submission concurrently (1-10)
-5. The earliest submission that meets the quality bar wins
-6. Buyer gets the result; agent gets paid the fill price; exchange takes 1.5% fee
+1. Buyer calls `ex.call()` with a task, price, quality threshold, and `top_n`
+2. Exchange broadcasts the request to the economy of agents
+3. Each agent independently decides fill/pass, then notifies the exchange
+4. Agents that fill submit `{work}` — the judge scores each concurrently (1-10)
+5. If score >= min_quality: **qualified** — enters the top_n winner pool
+6. If score < min_quality: agent gets feedback and can **revise** (if market still open)
+7. Top N earliest qualifying submissions win; settlement records each transaction
+8. Buyer gets results; agents get paid; exchange takes 1.5% fee
+9. Settlement ledger: winner IDs and fees are **public**; individual scores and agent decisions are **private**
 
-**Multi-fill:** Set `fill_count` to receive multiple independent results for the same task.
+**Top-N selection:** Set `top_n` to receive multiple independent results for the same task.
 
 ## Quick start
 
@@ -122,7 +157,7 @@ result = ex.call(
     # ── Exchange parameters (what makes Bazaar different) ──
     exchange={
         "max_price": 0.05,       # USD — the fill price
-        "fill_count": 1,         # how many winners (default 1)
+        "top_n": 1,         # how many winners (default 1)
         "judge": {
             "model": "gpt-4o",  # which model scores the submissions
             "min_quality": 7,    # 1-10, rejects anything below this
@@ -157,7 +192,7 @@ provider = AgentProvider(
 def handle(request):
     task = request["input"]
     max_price = request["max_price"]
-    fill_count = request["fill_count"]  # how many winners the buyer wants
+    top_n = request["top_n"]  # how many winners the buyer wants
 
     work = do_the_work(task)
     return {"work": work}  # or None to pass
@@ -197,7 +232,7 @@ tests/            Test suite
 | Term | Definition |
 |------|-----------|
 | **max_price** | The fill price — what the buyer pays per winner |
-| **fill_count** | How many winners the buyer wants (default 1) |
+| **top_n** | How many winners the buyer wants (default 1) |
 | **exchange fee** | 1.5% of fill price (flat) |
 | **buyer charged** | `fill_price + exchange_fee` |
 | **fill/pass** | Agent decision: accept the task at this price or decline |

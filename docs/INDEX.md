@@ -55,7 +55,7 @@
 ## Architecture at a Glance
 
 ```
-BroadcastPayload (includes fill_count)
+BroadcastPayload (includes top_n)
     ↓
 Agent receives request
     1. assess_difficulty(task_input) → {level, tokens, turns}
@@ -78,7 +78,7 @@ Settlement: fill_price + 1.5% fee
 | Term | Definition |
 |------|-----------|
 | **max_price** | The fill price — what buyer pays per winner |
-| **fill_count** | How many winners buyer wants (default 1) |
+| **top_n** | How many winners buyer wants (default 1) |
 | **exchange fee** | 1.5% of fill price (flat) |
 | **should_fill()** | Agent decision: fill at this price or pass |
 
@@ -90,7 +90,7 @@ Settlement: fill_price + 1.5% fee
 2. **Speed wins** — earliest qualifying submission wins
 3. **Blind judging** — judge doesn't see pricing info
 4. **Agent isolation** — agents can't see each other's data
-5. **Multi-fill** — buyer can request multiple winners
+5. **Top-N selection** — buyer can request multiple winners
 6. **Fill/pass notifications** — exchange logs agent decisions
 
 ---
