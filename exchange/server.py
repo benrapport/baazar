@@ -13,7 +13,8 @@ from fastapi import FastAPI, HTTPException, Header
 from openai import OpenAI
 
 from bazaar.types import (
-    AgentRegistration, CallRequest, ExchangeResult, SubmissionPayload,
+    AgentNotification, AgentRegistration, CallRequest,
+    ExchangeResult, SubmissionPayload,
 )
 from exchange.game import receive_submission, run_game
 from exchange.judge import Judge
@@ -25,7 +26,7 @@ from exchange.types import GameState
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Bazaar Exchange", version="0.1.0")
+app = FastAPI(title="Bazaar Exchange", version="0.2.0")
 
 @app.on_event("startup")
 def _expand_thread_pool():
@@ -79,16 +80,17 @@ def _check_auth(authorization: str | None) -> str:
 
 # ── Buyer endpoint ────────────────────────────────────────────────────
 
-@app.post("/call", response_model=ExchangeResult)
+@app.post("/call")
 async def call_exchange(
     req: CallRequest,
     authorization: str | None = Header(None),
 ):
-    """Buyer submits a task. Exchange runs the game, returns the winner."""
+    """Buyer submits a task. Exchange runs the game, returns winner(s)."""
     buyer_id = _check_auth(authorization)
 
     llm = req.llm
     exc = req.exchange
+    fill_count = exc.fill_count
 
     # Create game state so agents can submit while game runs
     request_id = f"req_{uuid.uuid4().hex[:12]}"
@@ -99,12 +101,13 @@ async def call_exchange(
         min_quality=exc.judge.min_quality,
         quality_criteria=exc.judge.criteria,
         buyer_id=buyer_id,
+        fill_count=fill_count,
     )
     with _games_lock:
         active_games[request_id] = state
 
     try:
-        result = await run_game(
+        results = await run_game(
             input_text=llm.input,
             max_price=exc.max_price,
             min_quality=exc.judge.min_quality,
@@ -117,6 +120,7 @@ async def call_exchange(
             state=state,
             llm_config=llm,
             market_log_store=market_log_store,
+            fill_count=fill_count,
         )
     except ValueError as e:
         raise HTTPException(404, str(e))
@@ -126,7 +130,7 @@ async def call_exchange(
         with _games_lock:
             active_games.pop(request_id, None)
 
-    return result
+    return results
 
 
 # ── Agent endpoints ───────────────────────────────────────────────────
@@ -144,7 +148,7 @@ async def register_agent(reg: AgentRegistration):
 
 @app.post("/submit/{request_id}")
 async def submit_work(request_id: str, sub: SubmissionPayload):
-    """Agent submits work + price for an active request."""
+    """Agent submits work for an active request."""
     state = active_games.get(request_id)
     if not state:
         raise HTTPException(404, f"No active game for request {request_id}")
@@ -158,8 +162,19 @@ async def submit_work(request_id: str, sub: SubmissionPayload):
 
 
 @app.get("/feedback/{request_id}/{agent_id}")
-async def get_feedback(request_id: str, agent_id: str):
-    """Agent polls for judge feedback on their submission."""
+async def get_feedback(
+    request_id: str,
+    agent_id: str,
+    x_agent_id: str | None = Header(None),
+):
+    """Agent polls for judge feedback on THEIR OWN submission only.
+
+    Agents must include X-Agent-Id header matching the path agent_id
+    to prevent probing other agents' scores.
+    """
+    if x_agent_id is not None and x_agent_id != agent_id:
+        raise HTTPException(403, "Can only access own feedback")
+
     state = active_games.get(request_id)
     if not state:
         raise HTTPException(404, "No active game")
@@ -182,17 +197,43 @@ async def get_feedback(request_id: str, agent_id: str):
     }
 
 
+@app.post("/notify/{request_id}")
+async def notify_decision(request_id: str, notification: AgentNotification):
+    """Agent notifies exchange of fill/pass decision (exchange-internal).
+
+    This is logged for analytics but not exposed to other agents.
+    """
+    state = active_games.get(request_id)
+    if not state:
+        raise HTTPException(404, f"No active game for request {request_id}")
+
+    mlog = state.market_log
+    if mlog:
+        mlog.emit(
+            "agent_decision",
+            agent_id=notification.agent_id,
+            decision=notification.decision,
+            reason=notification.reason,
+        )
+
+    logger.debug(
+        f"[{request_id}] {notification.agent_id}: {notification.decision}"
+        + (f" ({notification.reason})" if notification.reason else "")
+    )
+    return {"status": "recorded"}
+
+
 # ── Market log endpoints ─────────────────────────────────────────────
 
 @app.get("/markets")
 async def list_markets():
-    """List all completed market logs."""
+    """List all completed market logs (summary only, no per-agent data)."""
     logs = market_log_store.get_all()
     return [
         {
             "request_id": log.request_id,
             "winner": log.winner,
-            "agents_invited": log.agents_invited,
+            "num_agents": len(log.agents_invited),
             "num_events": len(log.events),
             "opened_at": log.opened_at,
             "closed_at": log.closed_at,
@@ -203,7 +244,7 @@ async def list_markets():
 
 @app.get("/markets/{request_id}")
 async def get_market(request_id: str):
-    """Get full market log for a request."""
+    """Get full market log for a request (post-settlement only)."""
     log = market_log_store.get(request_id)
     if not log:
         raise HTTPException(404, f"No market log for {request_id}")

@@ -26,8 +26,8 @@ class Exchange:
         self.server_url = server_url.rstrip("/")
         self._headers = {"Authorization": f"Bearer {api_key}"}
 
-    def call(self, llm: dict, exchange: dict) -> ExchangeResult:
-        """Submit a task to the exchange. Returns the winning result.
+    def call(self, llm: dict, exchange: dict) -> ExchangeResult | list[ExchangeResult]:
+        """Submit a task to the exchange. Returns the winning result(s).
 
         Args:
             llm: LLM parameters (identical to OpenAI's API).
@@ -37,11 +37,11 @@ class Exchange:
 
             exchange: Exchange parameters (what makes Bazaar different).
                 Required: max_price
-                Optional: min_quality, quality_criteria, judge,
-                    timeout, metadata, idempotency_key
+                Optional: fill_count (default 1), min_quality,
+                    quality_criteria, judge, timeout, metadata
 
         Returns:
-            ExchangeResult with output, agent_id, price, score, metadata.
+            ExchangeResult for fill_count=1, list[ExchangeResult] for fill_count>1.
 
         Raises:
             ValueError: Invalid parameters or missing required fields.
@@ -108,6 +108,10 @@ class Exchange:
             )
 
         try:
-            return ExchangeResult(**resp.json())
+            data = resp.json()
+            if isinstance(data, list):
+                results = [ExchangeResult(**r) for r in data]
+                return results[0] if len(results) == 1 else results
+            return ExchangeResult(**data)
         except Exception as e:
             raise RuntimeError(f"Invalid response from exchange: {e}")

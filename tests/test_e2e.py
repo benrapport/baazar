@@ -231,12 +231,12 @@ def test_manual_submission():
         shared["state"] = state
         shared["request_id"] = request_id
 
-        result = await run_game(
+        results = await run_game(
             input_text="What is 1+1?", max_price=5.0, min_quality=1,
             buyer_id="demo", registry=registry, judge=_get_judge(),
             ledger=ledger, timeout=10.0, state=state,
         )
-        return result.model_dump()
+        return results[0].model_dump()
 
     @test_app.post("/submit/{request_id}")
     async def submit(request_id: str, sub: SubmissionPayload):

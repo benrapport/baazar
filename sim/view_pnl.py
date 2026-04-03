@@ -53,10 +53,10 @@ def compute_pnl(markets: list[dict], summary: dict) -> dict:
 
     agent_costs = summary.get("agent_costs_usd", {})
 
-    # Agent revenue: sum of winning bids from market_settled events
+    # Agent revenue: sum of fill prices from market_settled events
     agent_revenue: dict[str, float] = {}
     agent_wins: dict[str, int] = {}
-    agent_tasks_bid: dict[str, int] = {}
+    agent_submissions: dict[str, int] = {}
     exchange_fees = 0.0
     buyer_total_charged = 0.0
     total_markets = len(markets)
@@ -67,7 +67,7 @@ def compute_pnl(markets: list[dict], summary: dict) -> dict:
         for event in market.get("events", []):
             if event["type"] == "submission_received":
                 aid = event["data"]["agent_id"]
-                agent_tasks_bid[aid] = agent_tasks_bid.get(aid, 0) + 1
+                agent_submissions[aid] = agent_submissions.get(aid, 0) + 1
 
             if event["type"] == "market_settled":
                 d = event["data"]
@@ -80,7 +80,7 @@ def compute_pnl(markets: list[dict], summary: dict) -> dict:
 
     # All agent IDs (union of all sources)
     all_agents = sorted(
-        set(agent_costs.keys()) | set(agent_revenue.keys()) | set(agent_tasks_bid.keys())
+        set(agent_costs.keys()) | set(agent_revenue.keys()) | set(agent_submissions.keys())
     )
 
     agents_pnl = []
@@ -89,7 +89,7 @@ def compute_pnl(markets: list[dict], summary: dict) -> dict:
         cost = agent_costs.get(aid, 0)
         profit = revenue - cost
         wins = agent_wins.get(aid, 0)
-        bids = agent_tasks_bid.get(aid, 0)
+        subs = agent_submissions.get(aid, 0)
         margin = (profit / revenue * 100) if revenue > 0 else 0
 
         agents_pnl.append({
@@ -99,8 +99,8 @@ def compute_pnl(markets: list[dict], summary: dict) -> dict:
             "profit": profit,
             "margin_pct": margin,
             "wins": wins,
-            "bids": bids,
-            "win_rate": (wins / bids * 100) if bids > 0 else 0,
+            "submissions": subs,
+            "win_rate": (wins / subs * 100) if subs > 0 else 0,
         })
 
     # Sort by profit descending
@@ -144,7 +144,7 @@ def print_pnl(pnl: dict):
     # Agent PnL table
     print(f"\n{'AGENT PnL':^90}")
     print("-" * 90)
-    print(f"  {'Agent':<20s} {'Revenue':>10s} {'Cost':>10s} {'Profit':>10s} {'Margin':>8s} {'Wins':>6s} {'Bids':>6s} {'Win%':>7s}")
+    print(f"  {'Agent':<20s} {'Revenue':>10s} {'Cost':>10s} {'Profit':>10s} {'Margin':>8s} {'Wins':>6s} {'Subs':>6s} {'Win%':>7s}")
     print("-" * 90)
     for a in agents:
         profit_str = f"${a['profit']:.4f}"
@@ -157,7 +157,7 @@ def print_pnl(pnl: dict):
             f"{profit_str:>10s} "
             f"{a['margin_pct']:>7.1f}% "
             f"{a['wins']:>5d} "
-            f"{a['bids']:>5d} "
+            f"{a['submissions']:>5d} "
             f"{a['win_rate']:>6.1f}%"
         )
     print("-" * 90)

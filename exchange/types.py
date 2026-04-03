@@ -51,7 +51,9 @@ class GameState(BaseModel):
     buyer_id: str
     start_time: float = Field(default_factory=time.time)
     submissions: dict[str, Submission] = {}
-    winner: str | None = None
+    fill_count: int = 1  # how many winners to collect
+    winners: list[str] = []  # collected winner agent_ids (ordered)
+    winner: str | None = None  # first/only winner (backward compat)
     done: bool = False
     timeout: float = 60.0
     lock: threading.Lock = Field(default_factory=threading.Lock, exclude=True)

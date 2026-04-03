@@ -14,7 +14,7 @@ import httpx
 import uvicorn
 from fastapi import FastAPI
 
-from bazaar.types import AgentRegistration, BroadcastPayload, SubmissionPayload
+from bazaar.types import AgentRegistration, AgentNotification, BroadcastPayload, SubmissionPayload
 
 logger = logging.getLogger(__name__)
 
@@ -83,48 +83,74 @@ class AgentProvider:
         async def health():
             return {"agent_id": self.agent_id, "status": "ok"}
 
+    def _agent_headers(self) -> dict[str, str]:
+        """Headers for agent-authenticated requests to the exchange."""
+        return {"X-Agent-Id": self.agent_id}
+
     async def _solve_and_submit(self, payload: BroadcastPayload):
-        """Solve the task in a thread, then submit the result."""
+        """Solve the task, then submit work or notify pass."""
         try:
             result = await asyncio.to_thread(
                 self._handler, payload.model_dump()
             )
         except Exception as e:
             logger.error(f"Handler error: {e}")
+            await self._notify_decision(payload.request_id, "pass", reason=str(e))
             return
 
         if result is None:
+            await self._notify_decision(payload.request_id, "pass")
             return
 
-        work = result.get("work", "")
+        # Notify fill decision, then submit work
+        await self._notify_decision(payload.request_id, "fill")
+        await self._submit_work(payload.request_id, result.get("work", ""))
 
+    async def _submit_work(self, request_id: str, work: str):
+        """POST work submission to exchange."""
         sub = SubmissionPayload(
             agent_id=self.agent_id,
-            request_id=payload.request_id,
+            request_id=request_id,
             work=work,
         )
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.post(
-                    f"{self.exchange_url}/submit/{payload.request_id}",
+                    f"{self.exchange_url}/submit/{request_id}",
                     json=sub.model_dump(),
+                    headers=self._agent_headers(),
                 )
                 if resp.status_code == 404:
                     logger.warning(
-                        f"Market {payload.request_id} already closed "
-                        f"(agent too slow)"
+                        f"Market {request_id} already closed (agent too slow)"
                     )
                 elif resp.status_code >= 400:
                     logger.warning(
-                        f"Submission rejected for {payload.request_id}: "
+                        f"Submission rejected for {request_id}: "
                         f"status={resp.status_code}"
                     )
                 else:
-                    logger.info(
-                        f"Submitted to {payload.request_id}: accepted"
-                    )
+                    logger.info(f"Submitted to {request_id}: accepted")
         except Exception as e:
             logger.error(f"Failed to submit: {e}")
+
+    async def _notify_decision(self, request_id: str, decision: str,
+                               reason: str = ""):
+        """POST fill/pass notification to exchange (exchange-internal logging)."""
+        notification = AgentNotification(
+            agent_id=self.agent_id,
+            decision=decision,
+            reason=reason,
+        )
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                await client.post(
+                    f"{self.exchange_url}/notify/{request_id}",
+                    json=notification.model_dump(),
+                    headers=self._agent_headers(),
+                )
+        except Exception:
+            pass  # best-effort — don't fail the agent over a notification
 
     def _register_with_exchange(self):
         """Register this agent with the exchange server."""

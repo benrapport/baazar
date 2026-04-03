@@ -238,7 +238,7 @@ async def dashboard():
 
 <div class="section card" style="margin-top: 12px;">
   <h2>Recent Tasks</h2>
-  <table id="recent"><thead><tr><th>Task</th><th>Category</th><th>Diff</th><th>Winner</th><th>Bid</th><th>Score</th><th>Error</th></tr></thead><tbody></tbody></table>
+  <table id="recent"><thead><tr><th>Task</th><th>Category</th><th>Diff</th><th>Winner</th><th>Price</th><th>Score</th><th>Error</th></tr></thead><tbody></tbody></table>
 </div>
 
 <script>

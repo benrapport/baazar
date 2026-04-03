@@ -6,9 +6,11 @@ import logging
 from openai import OpenAI
 from exchange.types import Submission
 
+from exchange.config import ExchangeDefaults
+
 logger = logging.getLogger(__name__)
 
-DEFAULT_JUDGE_MODEL = "gpt-4o-mini"  # fast + cheap, buyer can override
+DEFAULT_JUDGE_MODEL = ExchangeDefaults.JUDGE_MODEL
 
 DEFAULT_CRITERIA = [
     "Correctness: Does it accurately complete the task?",
