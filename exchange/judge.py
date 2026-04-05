@@ -86,6 +86,55 @@ def _truncate(text: str, max_chars: int = 50_000) -> str:
     return text[:max_chars] + f"\n... [truncated, {len(text)} chars total]"
 
 
+IMAGE_PREFIX = "data:image/"
+
+
+def _is_image_submission(work: str) -> bool:
+    """Detect if a submission contains a base64-encoded image."""
+    return bool(work) and work.startswith(IMAGE_PREFIX)
+
+
+IMAGE_CRITERIA = [
+    "Accuracy: Does the image match the prompt description?",
+    "Composition: Is the layout balanced and visually appealing?",
+    "Detail: Is there appropriate level of detail and clarity?",
+    "Style: Is the artistic quality and style consistent?",
+]
+
+
+def _build_vision_messages(task: str, image_data: str,
+                           criteria: list[str] | None = None) -> list[dict]:
+    """Build messages for vision-based image scoring."""
+    criteria = criteria or IMAGE_CRITERIA
+    criteria_text = "\n".join(f"- {c}" for c in criteria)
+
+    system_prompt = (
+        "You are scoring AI-generated images for a marketplace. "
+        "Rate the image 1-10.\n\n"
+        f"Scoring criteria:\n{criteria_text}\n\n"
+        "Be a fair but demanding judge. 7 = good professional quality. "
+        "5 = mediocre. 9-10 = excellent.\n\n"
+        "Respond with ONLY valid JSON:\n"
+        '{"score": <1-10>, "feedback": "<1-2 sentence feedback>"}'
+    )
+
+    user_content = [
+        {
+            "type": "text",
+            "text": f"Task prompt: {task}\n\nScore the generated image below:",
+        },
+        {
+            "type": "image_url",
+            "image_url": {"url": image_data},
+        },
+    ]
+
+    return [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_content},
+    ]
+
+
 class Judge:
     def __init__(self, client: OpenAI | None = None,
                  model: str = DEFAULT_JUDGE_MODEL):
@@ -96,8 +145,13 @@ class Judge:
                          quality_criteria: list[str] | None = None) -> dict:
         """Score a single submission. Returns {score: int, feedback: str}.
 
+        Automatically detects image submissions and uses vision scoring.
         If quality_criteria is provided, uses those instead of defaults.
         """
+        if _is_image_submission(submission.work):
+            return self._score_image(task, submission.work, quality_criteria)
+
+        # Text scoring (existing behavior)
         criteria = quality_criteria or DEFAULT_CRITERIA
         system_prompt = _build_judge_prompt(criteria)
         work = _truncate(submission.work)
@@ -120,6 +174,27 @@ class Judge:
         except Exception as e:
             logger.error(f"Judge scoring failed: {e}")
             return {"score": 1, "feedback": f"Judge error: {e}"}
+
+    def _score_image(self, task: str, image_data: str,
+                     quality_criteria: list[str] | None = None) -> dict:
+        """Score an image submission using vision."""
+        messages = _build_vision_messages(task, image_data, quality_criteria)
+        vision_model = "gpt-4o"
+
+        try:
+            resp = self._client.chat.completions.create(
+                model=vision_model,
+                max_completion_tokens=256,
+                messages=messages,
+            )
+            result = parse_json(resp.choices[0].message.content)
+            return {
+                "score": _clamp_score(result.get("score")),
+                "feedback": str(result.get("feedback", "")),
+            }
+        except Exception as e:
+            logger.error(f"Vision judge scoring failed: {e}")
+            return {"score": 1, "feedback": f"Vision judge error: {e}"}
 
     def score_batch(self, task: str,
                     submissions: dict[str, Submission],
