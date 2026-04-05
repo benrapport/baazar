@@ -39,13 +39,16 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from agents.image_tool import get_best_option, PROMPT_REWRITE_COST
+from agents.image_tool import get_best_option, estimate_thinking_cost
 
 
 # ── Agent cost estimation ────────────────────────────────────────────
 
 def _load_strategy_costs() -> dict[str, float]:
-    """Load strategies and estimate per-task cost for each agent."""
+    """Load strategies and estimate per-task cost for each agent.
+
+    Total cost = image generation + LLM thinking (prompt rewrite).
+    """
     costs = {}
     strategies_path = ROOT / "agents" / "strategies.json"
     if strategies_path.exists():
@@ -53,8 +56,9 @@ def _load_strategy_costs() -> dict[str, float]:
             strategies = json.load(f)
         for s in strategies:
             option = get_best_option(0.10, prefer=s["economic_strategy"])
+            thinking = estimate_thinking_cost(has_memory=True)  # assume memory active
             if option:
-                costs[s["id"]] = option["cost"] + PROMPT_REWRITE_COST
+                costs[s["id"]] = option["cost"] + thinking
             else:
                 costs[s["id"]] = 0.01  # fallback
     return costs

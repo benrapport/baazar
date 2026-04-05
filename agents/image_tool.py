@@ -40,8 +40,23 @@ COST_CATALOG: dict[tuple[str, str, str], float] = {
     ("gpt-image-1.5", "1536x1024", "auto"): 0.038,
 }
 
-# Prompt rewriting cost (gpt-4o-mini, ~200 input + 200 output tokens)
-PROMPT_REWRITE_COST = 0.001
+# ── LLM thinking costs ───────────────────────────────────────────────
+# Prompt rewriting uses gpt-4o-mini. Costs vary by context size.
+# Base: ~200 input + 200 output tokens for simple rewrite.
+# With memory context (few-shot examples): ~800 input + 200 output tokens.
+# gpt-4o-mini: $0.15/1M input, $0.60/1M output
+
+PROMPT_REWRITE_COST_BASE = 0.0001  # ~200 tokens in + 200 out, no memory
+PROMPT_REWRITE_COST_WITH_MEMORY = 0.0003  # ~800 tokens in + 200 out, with few-shot
+
+
+def estimate_thinking_cost(has_memory: bool = False) -> float:
+    """Estimate the LLM token cost for prompt rewriting."""
+    return PROMPT_REWRITE_COST_WITH_MEMORY if has_memory else PROMPT_REWRITE_COST_BASE
+
+
+# Total per-task overhead (backward compat)
+PROMPT_REWRITE_COST = PROMPT_REWRITE_COST_WITH_MEMORY  # conservative estimate
 
 # ── Helper lookups ───────────────────────────────────────────────────
 

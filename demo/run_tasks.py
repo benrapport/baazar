@@ -36,8 +36,37 @@ from bazaar.client import Exchange
 # Each task has: prompt, max_price, min_quality, criteria, tier label
 
 TASKS_VARIED = [
+    # ── PENNY TIER ($0.012-0.02, quality 4-5) ──────────────────────
+    # Ultra-cheap — only gpt-image-1-mini ($0.009) fits. Most agents
+    # must pass. Tests economic discipline.
+    {
+        "prompt": "A blue circle",
+        "max_price": 0.012, "min_quality": 4, "tier": "penny",
+        "criteria": ["Shows a blue circle"],
+    },
+    {
+        "prompt": "A tree",
+        "max_price": 0.015, "min_quality": 4, "tier": "penny",
+        "criteria": ["Shows a tree"],
+    },
+    {
+        "prompt": "A house with a red door",
+        "max_price": 0.018, "min_quality": 5, "tier": "penny",
+        "criteria": ["House with a red door visible"],
+    },
+    {
+        "prompt": "A yellow star on a dark background",
+        "max_price": 0.012, "min_quality": 4, "tier": "penny",
+        "criteria": ["Yellow star shape on dark background"],
+    },
+    {
+        "prompt": "A smiling face",
+        "max_price": 0.015, "min_quality": 5, "tier": "penny",
+        "criteria": ["A face that is smiling"],
+    },
+
     # ── BUDGET TIER ($0.03-0.05, quality 5-6) ────────────────────────
-    # Quick cheap tasks — budget agents should dominate
+    # Cheap tasks — budget agents should dominate
     {
         "prompt": "A red apple on a white table",
         "max_price": 0.03, "min_quality": 5, "tier": "budget",
@@ -238,6 +267,7 @@ TASKS_VARIED = [
 
 
 TIER_COLORS = {
+    "penny": "\033[90m",     # gray
     "budget": "\033[32m",    # green
     "mid": "\033[33m",       # yellow
     "premium": "\033[35m",   # magenta
@@ -248,8 +278,8 @@ RESET = "\033[0m"
 
 def main():
     parser = argparse.ArgumentParser(description="Submit tasks to the exchange")
-    parser.add_argument("--tasks", type=int, default=20,
-                        help="Number of tasks to submit (default: 20)")
+    parser.add_argument("--tasks", type=int, default=25,
+                        help="Number of tasks to submit (default: 25)")
     parser.add_argument("--interval", type=float, default=3.0,
                         help="Seconds between tasks (default: 3)")
     parser.add_argument("--timeout", type=float, default=90.0,
@@ -346,7 +376,7 @@ def main():
     # Per-tier breakdown
     print(f"\n  {'Tier':<10} {'Won':>4} {'Timeout':>8} {'Avg Score':>10} {'Avg Time':>9}")
     print(f"  {'─' * 45}")
-    for tier in ["budget", "mid", "premium", "creative"]:
+    for tier in ["penny", "budget", "mid", "premium", "creative"]:
         tier_wins = [r for r in wins if r["tier"] == tier]
         tier_timeouts = [r for r in timeouts if r["tier"] == tier]
         tier_total = sum(1 for r in results if r["tier"] == tier)

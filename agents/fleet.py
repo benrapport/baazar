@@ -18,7 +18,7 @@ from fastapi import FastAPI
 from openai import OpenAI
 
 from bazaar.types import AgentRegistration, BroadcastPayload, SubmissionPayload, AgentNotification
-from agents.image_tool import generate_image, get_best_option, PROMPT_REWRITE_COST
+from agents.image_tool import generate_image, get_best_option, PROMPT_REWRITE_COST, estimate_thinking_cost
 from agents.memory import AgentMemory
 
 logger = logging.getLogger(__name__)
@@ -107,11 +107,21 @@ class ImageFleet:
         model = option["model"]
         size = option["size"]
         quality = option["quality"]
-        cost = option["cost"] + PROMPT_REWRITE_COST
+        has_memory = len(memory.scored_attempts) > 0
+        thinking_cost = estimate_thinking_cost(has_memory)
+        image_cost = option["cost"]
+        total_cost = image_cost + thinking_cost
+        margin = max_price - total_cost
+
+        if margin < 0:
+            logger.info(f"[{agent_id}] PASS — negative margin at ${max_price}")
+            await self._notify(request_id, agent_id, "pass", "negative margin")
+            return
 
         logger.info(
-            f"[{agent_id}] FILL — {model} {size} ${cost:.3f} "
-            f"(margin ${max_price - cost:.3f})"
+            f"[{agent_id}] FILL — {model} {size} "
+            f"img=${image_cost:.4f} think=${thinking_cost:.4f} "
+            f"total=${total_cost:.4f} margin=${margin:.4f}"
         )
         await self._notify(request_id, agent_id, "fill")
 
