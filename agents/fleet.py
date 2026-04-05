@@ -19,6 +19,7 @@ from openai import OpenAI
 
 from bazaar.types import AgentRegistration, BroadcastPayload, SubmissionPayload, AgentNotification
 from agents.image_tool import generate_image, get_best_option, PROMPT_REWRITE_COST
+from agents.memory import AgentMemory
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,9 @@ class ImageFleet:
 
         self._llm_client: OpenAI | None = None
         self._pending_tasks: set[asyncio.Task] = set()
+        self._memories: dict[str, AgentMemory] = {
+            s["id"]: AgentMemory() for s in self.strategies
+        }
         self._app = FastAPI(title="Image Agent Fleet")
         self._setup_routes()
 
@@ -91,6 +95,7 @@ class ImageFleet:
         max_price = payload.max_price
         user_prompt = payload.input
         request_id = payload.request_id
+        memory = self._memories[agent_id]
 
         # Pick model config based on economic strategy
         option = get_best_option(max_price, prefer=strategy["economic_strategy"])
@@ -111,10 +116,13 @@ class ImageFleet:
         await self._notify(request_id, agent_id, "fill")
 
         try:
-            # Rewrite prompt using agent's strategy
+            # Rewrite prompt using agent's strategy + memory
             rewritten = await asyncio.to_thread(
-                self._rewrite_prompt, strategy, user_prompt, model
+                self._rewrite_prompt, strategy, user_prompt, model, memory
             )
+
+            # Record attempt before we know the score
+            memory.record_attempt(request_id, user_prompt, rewritten, model)
 
             # Generate image
             data_uri = await asyncio.to_thread(
@@ -124,18 +132,73 @@ class ImageFleet:
             # Submit to exchange
             await self._submit(request_id, agent_id, data_uri)
 
+            # Poll for feedback asynchronously (don't block the handler)
+            asyncio.create_task(
+                self._poll_feedback(request_id, agent_id, memory)
+            )
+
         except Exception as e:
             logger.error(f"[{agent_id}] Failed: {e}")
 
+    async def _poll_feedback(self, request_id: str, agent_id: str,
+                             memory: AgentMemory):
+        """Poll the exchange for our score after submission. Retry a few times."""
+        for delay in [3, 5, 10, 15, 20]:
+            await asyncio.sleep(delay)
+            try:
+                async with httpx.AsyncClient(timeout=5.0) as client:
+                    resp = await client.get(
+                        f"{self.exchange_url}/feedback/{request_id}/{agent_id}",
+                        headers={"X-Agent-Id": agent_id},
+                    )
+                    if resp.status_code != 200:
+                        continue
+                    data = resp.json()
+                    if data.get("status") == "scored":
+                        score = data["score"]
+                        feedback = data.get("feedback", "")
+                        won = data.get("won", False)
+                        memory.record_score(request_id, score, feedback, won)
+                        avg = memory.get_avg_score()
+                        logger.info(
+                            f"[{agent_id}] Score: {score}/10"
+                            + (" [WON]" if won else "")
+                            + (f" (avg: {avg:.1f})" if avg else "")
+                        )
+                        return
+                    if data.get("status") == "not_found":
+                        # Game ended, no score for us (we were too slow)
+                        return
+            except Exception:
+                pass
+        logger.debug(f"[{agent_id}] Feedback timeout for {request_id}")
+
     def _rewrite_prompt(self, strategy: dict, user_prompt: str,
-                        model: str) -> str:
-        """Use LLM to rewrite the user prompt according to agent's strategy."""
-        system = (
-            f"{strategy['system_prompt']}\n\n"
-            f"You are rewriting an image generation prompt for the {model} model. "
+                        model: str, memory: AgentMemory | None = None) -> str:
+        """Use LLM to rewrite the user prompt according to agent's strategy.
+
+        If the agent has memory of past attempts, injects few-shot examples
+        (best and worst scoring rewrites) so the LLM can learn what works.
+        """
+        context = memory.build_context() if memory else ""
+
+        system_parts = [strategy["system_prompt"]]
+
+        if context:
+            system_parts.append(
+                f"\n--- LEARNING FROM YOUR PAST RESULTS ---\n{context}\n"
+                f"Use these results to improve. Do more of what scored well. "
+                f"Avoid patterns that scored poorly."
+            )
+
+        system_parts.append(
+            f"\nYou are rewriting an image generation prompt for the {model} model. "
             f"Output ONLY the rewritten prompt, nothing else. "
             f"Keep it under 500 characters."
         )
+
+        system = "\n".join(system_parts)
+
         try:
             resp = self.llm_client.chat.completions.create(
                 model=REWRITE_MODEL,

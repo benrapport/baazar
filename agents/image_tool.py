@@ -26,18 +26,18 @@ COST_CATALOG: dict[tuple[str, str, str], float] = {
     ("dall-e-2", "1024x1024", "standard"): 0.020,
     ("dall-e-2", "512x512", "standard"):   0.018,
     ("dall-e-2", "256x256", "standard"):   0.016,
-    # gpt-image-1
+    # gpt-image-1 (supported sizes: 1024x1024, 1024x1536, 1536x1024, auto)
     ("gpt-image-1", "1024x1024", "auto"):  0.020,
-    ("gpt-image-1", "1024x1792", "auto"):  0.030,
-    ("gpt-image-1", "1792x1024", "auto"):  0.030,
+    ("gpt-image-1", "1024x1536", "auto"):  0.030,
+    ("gpt-image-1", "1536x1024", "auto"):  0.030,
     # gpt-image-1-mini
     ("gpt-image-1-mini", "1024x1024", "auto"): 0.009,
-    ("gpt-image-1-mini", "1024x1792", "auto"): 0.013,
-    ("gpt-image-1-mini", "1792x1024", "auto"): 0.013,
+    ("gpt-image-1-mini", "1024x1536", "auto"): 0.013,
+    ("gpt-image-1-mini", "1536x1024", "auto"): 0.013,
     # gpt-image-1.5
     ("gpt-image-1.5", "1024x1024", "auto"): 0.025,
-    ("gpt-image-1.5", "1024x1792", "auto"): 0.038,
-    ("gpt-image-1.5", "1792x1024", "auto"): 0.038,
+    ("gpt-image-1.5", "1024x1536", "auto"): 0.038,
+    ("gpt-image-1.5", "1536x1024", "auto"): 0.038,
 }
 
 # Prompt rewriting cost (gpt-4o-mini, ~200 input + 200 output tokens)
