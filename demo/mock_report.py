@@ -317,305 +317,188 @@ def build_report(markets: list[dict], results: list[dict],
 
 
 def generate_html(report: dict, path: Path):
-    """Generate enhanced HTML report with economic visualizations."""
+    """Generate widescreen dashboard HTML report."""
 
-    html = """<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Bazaar Exchange — Simulation Report</title>
-<style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: 'SF Mono', 'Fira Code', monospace; background: #0a0a0f; color: #e0e0e0; padding: 20px; max-width: 1400px; margin: 0 auto; }
-h1 { color: #ffd700; font-size: 1.8em; margin-bottom: 5px; }
-h2 { color: #00bcd4; font-size: 1.3em; margin: 35px 0 15px; border-bottom: 1px solid #333; padding-bottom: 5px; }
-.subtitle { color: #888; font-size: 0.9em; margin-bottom: 25px; }
-.mock-badge { background: #ff6f00; color: white; padding: 3px 10px; border-radius: 4px; font-size: 0.75em; margin-left: 10px; }
+    mock_badge = ' <span class="mock">MOCK DATA</span>' if report['metadata'].get('is_mock') else ''
+    report_json = json.dumps(report)
 
-.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 15px 0; }
-.stat-card { background: #141420; border: 1px solid #2a2a3a; border-radius: 8px; padding: 12px; text-align: center; }
-.stat-value { font-size: 1.6em; font-weight: bold; color: #ffd700; }
-.stat-label { font-size: 0.7em; color: #888; margin-top: 3px; }
-.stat-value.green { color: #4caf50; }
-.stat-value.red { color: #f44336; }
-.stat-value.blue { color: #42a5f5; }
-
-.chart-box { background: #141420; border: 1px solid #2a2a3a; border-radius: 8px; padding: 20px; margin: 15px 0; }
-.chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
-@media (max-width: 900px) { .chart-row { grid-template-columns: 1fr; } }
-
-.bar { display: flex; align-items: center; margin: 4px 0; }
-.bar-label { width: 180px; font-size: 0.78em; color: #aaa; text-align: right; padding-right: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bar-fill { height: 18px; border-radius: 3px; min-width: 2px; }
-.bar-value { font-size: 0.72em; color: #888; padding-left: 8px; white-space: nowrap; }
-
-table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 0.82em; }
-th { background: #1a1a2e; color: #888; text-align: left; padding: 8px 8px; font-weight: normal; text-transform: uppercase; font-size: 0.72em; letter-spacing: 1px; }
-td { padding: 6px 8px; border-bottom: 1px solid #1a1a2a; }
-tr:hover { background: #1a1a25; }
-.pos { color: #4caf50; }
-.neg { color: #f44336; }
-
-.tier-chip { padding: 4px 10px; border-radius: 12px; font-size: 0.75em; font-weight: bold; display: inline-block; }
-.tier-penny { background: #1a1a1a; color: #888; border: 1px solid #444; }
-.tier-budget { background: #0a2a0a; color: #4caf50; border: 1px solid #2e7d32; }
-.tier-stress { background: #2a1a0a; color: #ff9800; border: 1px solid #e65100; }
-.tier-mid { background: #2a2a0a; color: #ffeb3b; border: 1px solid #f9a825; }
-.tier-premium { background: #2a0a2a; color: #e040fb; border: 1px solid #7b1fa2; }
-.tier-creative { background: #0a2a2a; color: #26c6da; border: 1px solid #00838f; }
-
-.market-card { background: #141420; border: 1px solid #2a2a3a; border-radius: 8px; padding: 14px; margin: 8px 0; }
-.market-card .prompt { color: #ccc; font-style: italic; margin: 6px 0; font-size: 0.9em; }
-.scores-row { display: flex; gap: 5px; margin-top: 6px; flex-wrap: wrap; }
-.score-chip { padding: 2px 7px; border-radius: 3px; font-size: 0.72em; }
-.score-high { background: #1b5e20; color: #a5d6a7; }
-.score-mid { background: #4a3800; color: #ffe082; }
-.score-low { background: #4a0000; color: #ef9a9a; }
-.winner-badge { background: #2e7d32; color: white; padding: 2px 8px; border-radius: 10px; font-size: 0.78em; }
-.timeout-badge { background: #8b0000; color: #fcc; padding: 2px 8px; border-radius: 10px; font-size: 0.78em; }
-.revision-badge { background: #1a237e; color: #90caf9; padding: 2px 8px; border-radius: 10px; font-size: 0.78em; }
-
-.scatter-container { position: relative; height: 300px; margin: 10px 0; }
-.scatter-dot { position: absolute; width: 10px; height: 10px; border-radius: 50%; cursor: pointer; transition: transform 0.2s; }
-.scatter-dot:hover { transform: scale(2); z-index: 10; }
-.scatter-axis { position: absolute; color: #555; font-size: 0.7em; }
-
-.flow-diagram { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 20px; flex-wrap: wrap; }
-.flow-block { background: #1a1a2e; border: 1px solid #333; border-radius: 8px; padding: 12px 16px; text-align: center; min-width: 120px; }
-.flow-block .label { font-size: 0.7em; color: #888; }
-.flow-block .value { font-size: 1.3em; font-weight: bold; margin-top: 4px; }
-.flow-arrow { color: #555; font-size: 1.5em; }
-</style>
-</head>
-<body>
-
-<h1>BAZAAR EXCHANGE""" + (' <span class="mock-badge">MOCK DATA</span>' if report['metadata'].get('is_mock') else '') + """</h1>
-<div class="subtitle">Simulation Report — """ + report['metadata']['timestamp'] + """ — """ + str(report['metadata']['n_markets']) + """ markets, """ + str(report['metadata']['n_agents']) + """ agents</div>
-
-<div class="stats-grid" id="stats-grid"></div>
-
-<h2>EXCHANGE VALUE: WHERE DOES THE MONEY GO?</h2>
-<div class="chart-box">
-<div class="flow-diagram" id="money-flow"></div>
-</div>
-
-<h2>QUALITY GAP: EXCHANGE vs DIRECT API CALL</h2>
-<p style="color:#888;font-size:0.85em;margin:8px 0">Winner's score minus average score across all agents. The gap is the exchange's quality value-add — what competition buys you.</p>
-<div class="chart-box" id="quality-gap-chart"></div>
-
-<h2>PRICE-QUALITY FRONTIER</h2>
-<p style="color:#888;font-size:0.85em;margin:8px 0">Each dot is a settled market. Higher price doesn't always mean higher quality — the market reveals the efficient frontier.</p>
-<div class="chart-box"><div class="scatter-container" id="price-quality-scatter"></div></div>
-
-<h2>COST ABSORPTION: BUYER PAYS ONCE, AGENTS PAY MANY TIMES</h2>
-<p style="color:#888;font-size:0.85em;margin:8px 0">For every $1 the buyer pays, agents collectively spend $X on failed attempts. The exchange shifts retry cost from buyer to supply side.</p>
-<div class="chart-box" id="cost-absorption-chart"></div>
-
-<h2>REVISION ROI</h2>
-<p style="color:#888;font-size:0.85em;margin:8px 0">Score improvement from revision attempts. Shows how feedback-driven iteration improves outcomes.</p>
-<div class="chart-box" id="revision-chart"></div>
-
-<h2>TIER BREAKDOWN</h2>
-<div class="chart-row">
-<div class="chart-box" id="tier-table-container"></div>
-<div class="chart-box" id="tier-depth-chart"></div>
-</div>
-
-<h2>AGENT PnL LEADERBOARD</h2>
-<div class="chart-box" id="pnl-chart"></div>
-<table id="agent-table"><thead><tr>
-<th>#</th><th>Agent</th><th>Strategy</th><th>Aesthetic</th><th>W</th><th>L</th><th>Win%</th><th>Avg Score</th><th>Revenue</th><th>Costs</th><th>PnL</th><th>Revisions</th>
-</tr></thead><tbody></tbody></table>
-
-<h2>MARKET-BY-MARKET RESULTS</h2>
-<div id="markets-list"></div>
-
-<h2>SCORE DISTRIBUTION BY TIER</h2>
-<div class="chart-box" id="score-dist"></div>
-
-<script>
-const data = """ + json.dumps(report) + """;
-const econ = data.economics;
-const settled = data.markets.filter(m => m.status === 'settled');
-const timeouts = data.markets.filter(m => m.status === 'timeout');
-const agents = Object.entries(data.agent_pnl).map(([id, a]) => ({id, ...a})).sort((a,b) => b.pnl - a.pnl);
-const tierOrder = ['penny','budget','stress','mid','premium','creative'];
-const tierColors = {penny:'#888',budget:'#4caf50',stress:'#ff9800',mid:'#ffeb3b',premium:'#e040fb',creative:'#26c6da'};
-
-// Stats grid
-const avgScore = settled.length ? (settled.reduce((s,m)=>s+m.score,0)/settled.length).toFixed(1) : '—';
-document.getElementById('stats-grid').innerHTML = [
-    ['Markets', data.metadata.n_markets, ''],
-    ['Settled', settled.length, 'green'],
-    ['Timeouts', timeouts.length, timeouts.length ? 'red' : ''],
-    ['Avg Score', avgScore+'/10', ''],
-    ['Volume', '$'+econ.total_buyer_spend.toFixed(2), 'green'],
-    ['Agent Costs', '$'+econ.total_agent_costs.toFixed(2), 'red'],
-    ['Exchange Fees', '$'+econ.exchange_fees.toFixed(2), 'blue'],
-    ['Quality Gap', '+'+econ.avg_quality_gap.toFixed(1)+' pts', 'green'],
-    ['Revisions', econ.total_revisions+' ('+econ.successful_revisions+' won)', ''],
-].map(([l,v,c])=>`<div class="stat-card"><div class="stat-value ${c}">${v}</div><div class="stat-label">${l}</div></div>`).join('');
-
-// Money flow
-const agentProfit = Math.max(0, econ.total_agent_revenue - econ.total_agent_costs);
-const agentLoss = Math.max(0, econ.total_agent_costs - econ.total_agent_revenue);
-document.getElementById('money-flow').innerHTML = `
-    <div class="flow-block"><div class="label">BUYER PAYS</div><div class="value" style="color:#ffd700">$${econ.total_buyer_spend.toFixed(2)}</div></div>
-    <div class="flow-arrow">→</div>
-    <div class="flow-block"><div class="label">EXCHANGE FEE (1.5%)</div><div class="value" style="color:#42a5f5">$${econ.exchange_fees.toFixed(2)}</div></div>
-    <div class="flow-arrow">→</div>
-    <div class="flow-block"><div class="label">WINNING AGENTS</div><div class="value" style="color:#4caf50">$${econ.total_agent_revenue.toFixed(2)}</div></div>
-    <div class="flow-arrow">→</div>
-    <div class="flow-block"><div class="label">API COSTS (ALL AGENTS)</div><div class="value" style="color:#f44336">$${econ.total_agent_costs.toFixed(2)}</div></div>
-    <div class="flow-arrow">→</div>
-    <div class="flow-block"><div class="label">NET AGENT ${agentProfit > 0 ? 'PROFIT' : 'LOSS'}</div><div class="value" style="color:${agentProfit > 0 ? '#4caf50' : '#f44336'}">$${Math.abs(agentProfit || agentLoss).toFixed(2)}</div></div>
-`;
-
-// Quality gap chart per market
-const qgData = settled.map(m => {
-    const scores = m.submissions.map(s => s.final_score);
-    const avg = scores.reduce((a,b)=>a+b,0)/scores.length;
-    return { id: m.market_id, tier: m.tier, winner: m.score, avg: avg, gap: m.score - avg };
-}).sort((a,b) => b.gap - a.gap);
-const maxGap = Math.max(...qgData.map(d=>Math.abs(d.gap)), 1);
-document.getElementById('quality-gap-chart').innerHTML = qgData.map(d => {
-    const w = Math.abs(d.gap)/maxGap*100;
-    const color = d.gap > 0 ? '#4caf50' : '#f44336';
-    return `<div class="bar"><div class="bar-label"><span class="tier-chip tier-${d.tier}" style="font-size:0.65em;padding:2px 6px">${d.tier}</span> ${d.id}</div><div class="bar-fill" style="width:${w}%;background:${color}"></div><div class="bar-value">winner ${d.winner}/10 vs avg ${d.avg.toFixed(1)} = <strong style="color:${color}">${d.gap>0?'+':''}${d.gap.toFixed(1)}</strong></div></div>`;
-}).join('');
-
-// Price-quality scatter
-const pqContainer = document.getElementById('price-quality-scatter');
-const maxP = Math.max(...data.price_quality.map(d=>d.price));
-data.price_quality.forEach(d => {
-    const x = (d.price/maxP)*90 + 5;
-    const y = 95 - (d.score/10)*85;
-    const dot = document.createElement('div');
-    dot.className = 'scatter-dot';
-    dot.style.cssText = `left:${x}%;top:${y}%;background:${tierColors[d.tier]||'#888'}`;
-    dot.title = `${d.market_id}: $${d.price} → ${d.score}/10 (${d.tier})`;
-    pqContainer.appendChild(dot);
-});
-['$0','$'+maxP.toFixed(2)].forEach((l,i) => {
-    const el = document.createElement('div');
-    el.className='scatter-axis';
-    el.style.cssText=`bottom:-18px;${i?'right':'left'}:5%`;
-    el.textContent=l;
-    pqContainer.appendChild(el);
-});
-[1,5,10].forEach(s => {
-    const el = document.createElement('div');
-    el.className='scatter-axis';
-    el.style.cssText=`left:-25px;top:${95-s/10*85}%`;
-    el.textContent=s;
-    pqContainer.appendChild(el);
-});
-
-// Cost absorption
-const caData = data.cost_absorption.sort((a,b) => b.ratio - a.ratio);
-const maxRatio = Math.max(...caData.map(d=>d.ratio), 1);
-document.getElementById('cost-absorption-chart').innerHTML = caData.map(d => {
-    const w = d.ratio/maxRatio*100;
-    return `<div class="bar"><div class="bar-label"><span class="tier-chip tier-${d.tier}" style="font-size:0.65em;padding:2px 6px">${d.tier}</span> ${d.market_id}</div><div class="bar-fill" style="width:${w}%;background:#f44336"></div><div class="bar-value">buyer $${d.buyer_paid.toFixed(3)} → agents spent $${d.agents_spent.toFixed(3)} (${d.ratio.toFixed(1)}x)</div></div>`;
-}).join('');
-
-// Revision chart
-const revData = [];
-data.markets.forEach(m => {
-    m.submissions.forEach(s => {
-        if (s.n_revisions > 0) {
-            revData.push({agent: s.agent_id, market: m.market_id, tier: m.tier,
-                initial: s.initial_score, final: s.final_score,
-                n: s.n_revisions, qualified: s.qualified});
-        }
-    });
-});
-if (revData.length) {
-    document.getElementById('revision-chart').innerHTML = revData.map(d => {
-        const improved = d.final > d.initial;
-        const color = d.qualified ? '#4caf50' : (improved ? '#ffeb3b' : '#f44336');
-        return `<div class="bar"><div class="bar-label">${d.agent.substring(0,20)} (${d.market})</div><div style="display:flex;align-items:center;gap:8px"><span style="color:#888">${d.initial}/10</span><span style="color:#555">→${d.n}rev→</span><span style="color:${color};font-weight:bold">${d.final}/10</span>${d.qualified?'<span class="revision-badge">QUALIFIED</span>':''}</div></div>`;
-    }).join('');
-} else {
-    document.getElementById('revision-chart').innerHTML = '<div style="color:#555">No revisions in this simulation</div>';
-}
-
-// Tier table + depth chart
-const tierTableHtml = `<table><thead><tr><th>Tier</th><th>Mkts</th><th>OK</th><th>Fail</th><th>Avg Score</th><th>Q.Gap</th><th>Participants</th><th>Qualified</th><th>Volume</th></tr></thead><tbody>${
-    tierOrder.filter(t=>data.tier_summary[t]&&data.tier_summary[t].total>0).map(t=>{
-        const s=data.tier_summary[t];
-        return `<tr><td><span class="tier-chip tier-${t}">${t.toUpperCase()}</span></td><td>${s.total}</td><td>${s.settled}</td><td class="${s.timeouts?'neg':''}">${s.timeouts}</td><td>${s.avg_score?s.avg_score.toFixed(1):'—'}</td><td class="pos">+${s.quality_gap.toFixed(1)}</td><td>${s.avg_participants.toFixed(1)}</td><td>${s.avg_qualified.toFixed(1)}</td><td>$${s.total_volume.toFixed(2)}</td></tr>`;
-    }).join('')
-}</tbody></table>`;
-document.getElementById('tier-table-container').innerHTML = tierTableHtml;
-
-// Tier depth: avg participants vs qualified
-const depthHtml = tierOrder.filter(t=>data.tier_summary[t]&&data.tier_summary[t].total>0).map(t=>{
-    const s=data.tier_summary[t];
-    const pW = (s.avg_participants/10)*100;
-    const qW = (s.avg_qualified/10)*100;
-    return `<div style="margin:8px 0"><div style="font-size:0.8em;color:${tierColors[t]};margin-bottom:3px">${t.toUpperCase()}</div><div class="bar" style="margin:2px 0"><div class="bar-label" style="width:80px">Compete</div><div class="bar-fill" style="width:${pW}%;background:#42a5f5;opacity:0.5"></div><div class="bar-value">${s.avg_participants.toFixed(1)}</div></div><div class="bar" style="margin:2px 0"><div class="bar-label" style="width:80px">Qualify</div><div class="bar-fill" style="width:${qW}%;background:#4caf50"></div><div class="bar-value">${s.avg_qualified.toFixed(1)}</div></div></div>`;
-}).join('');
-document.getElementById('tier-depth-chart').innerHTML = '<h3 style="color:#888;margin-bottom:10px">COMPETITIVE DEPTH</h3>'+depthHtml;
-
-// PnL chart + table
-const maxPnl = Math.max(...agents.map(a=>Math.abs(a.pnl)),0.01);
-document.getElementById('pnl-chart').innerHTML = agents.map(a=>{
-    const w=Math.abs(a.pnl)/maxPnl*100;
-    const c=a.pnl>=0?'#4caf50':'#f44336';
-    return `<div class="bar"><div class="bar-label">${a.id}</div><div class="bar-fill" style="width:${w}%;background:${c}"></div><div class="bar-value">${a.pnl>=0?'+':''}$${a.pnl.toFixed(4)}</div></div>`;
-}).join('');
-
-document.querySelector('#agent-table tbody').innerHTML = agents.map((a,i)=>{
-    const pc=a.pnl>=0?'pos':'neg';
-    return `<tr><td>${i+1}</td><td style="font-weight:bold">${a.id}</td><td>${a.economic_strategy}</td><td>${a.aesthetic}</td><td>${a.wins}</td><td>${a.losses}</td><td>${(a.win_rate*100).toFixed(0)}%</td><td>${a.avg_score.toFixed(1)}</td><td>$${a.revenue.toFixed(3)}</td><td>$${a.costs.toFixed(3)}</td><td class="${pc}" style="font-weight:bold">${a.pnl>=0?'+':''}$${a.pnl.toFixed(3)}</td><td>${a.revisions_attempted} (${a.revisions_succeeded} won)</td></tr>`;
-}).join('');
-
-// Market cards
-document.getElementById('markets-list').innerHTML = data.markets.map(m=>{
-    let status='';
-    if(m.status==='settled'){
-        const revSubs=m.submissions.filter(s=>s.n_revisions>0);
-        const revNote=revSubs.length?` <span class="revision-badge">${revSubs.reduce((s,r)=>s+r.n_revisions,0)} revisions</span>`:'';
-        status=`<span class="winner-badge">★ ${m.winner}</span> ${m.score}/10 in ${m.elapsed.toFixed(0)}s${revNote}`;
-    } else {
-        status=`<span class="timeout-badge">TIMEOUT</span>`;
-    }
-    const scores=(m.submissions||[]).sort((a,b)=>b.final_score-a.final_score).slice(0,10).map(s=>{
-        const cls=s.final_score>=8?'score-high':(s.final_score>=6?'score-mid':'score-low');
-        const rev=s.n_revisions?` r${s.n_revisions}`:'';
-        return `<span class="score-chip ${cls}" title="${s.feedback}">${s.agent_id.substring(0,15)} ${s.final_score}${rev}</span>`;
-    }).join('');
-    return `<div class="market-card"><div style="display:flex;justify-content:space-between"><span><span class="tier-chip tier-${m.tier}">${m.tier.toUpperCase()}</span> <strong>${m.market_id}</strong></span><span style="color:#888">$${m.max_price.toFixed(3)} q≥${m.min_quality} | ${m.n_participants} agents, ${m.n_qualified} qualified</span></div><div class="prompt">"${m.prompt}"</div><div style="margin-top:6px">${status}</div><div class="scores-row">${scores}</div></div>`;
-}).join('');
-
-// Score distribution
-const scoreDist={};
-data.markets.forEach(m=>{
-    m.submissions.forEach(s=>{
-        if(!scoreDist[m.tier])scoreDist[m.tier]=[];
-        scoreDist[m.tier].push(s.final_score);
-    });
-});
-document.getElementById('score-dist').innerHTML = tierOrder.filter(t=>scoreDist[t]).map(t=>{
-    const scores=scoreDist[t];
-    const buckets=Array(10).fill(0);
-    scores.forEach(s=>buckets[Math.min(s,10)-1]++);
-    const maxB=Math.max(...buckets,1);
-    const bars=buckets.map((c,i)=>{
-        const h=c/maxB*60;
-        const color=i>=7?'#4caf50':(i>=5?'#ffeb3b':'#f44336');
-        return `<div style="display:inline-block;width:9%;text-align:center"><div style="height:60px;display:flex;align-items:flex-end;justify-content:center"><div style="width:70%;height:${h}px;background:${color};border-radius:2px 2px 0 0"></div></div><div style="font-size:0.7em;color:#666">${i+1}</div><div style="font-size:0.65em;color:#444">${c}</div></div>`;
-    }).join('');
-    return `<h3 style="margin-top:15px"><span class="tier-chip tier-${t}">${t.toUpperCase()}</span> n=${scores.length}, avg=${(scores.reduce((a,b)=>a+b,0)/scores.length).toFixed(1)}</h3><div>${bars}</div>`;
-}).join('');
-</script>
-</body>
-</html>"""
+    # Use a plain template with simple replacements — no f-strings near JS
+    html = _HTML_TEMPLATE.replace('__REPORT_JSON__', report_json)
+    html = html.replace('__MOCK_BADGE__', mock_badge)
+    html = html.replace('__TIMESTAMP__', report['metadata']['timestamp'])
+    html = html.replace('__N_MARKETS__', str(report['metadata']['n_markets']))
+    html = html.replace('__N_AGENTS__', str(report['metadata']['n_agents']))
 
     with open(path, "w") as f:
         f.write(html)
+
+
+_HTML_TEMPLATE = r"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Bazaar Exchange — Simulation Report</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'SF Mono','Fira Code',monospace;background:#0a0a0f;color:#e0e0e0;padding:12px 16px;font-size:13px}
+h1{color:#ffd700;font-size:1.5em;display:inline}
+.mock{background:#ff6f00;color:#fff;padding:2px 8px;border-radius:3px;font-size:.65em;vertical-align:middle}
+.sub{color:#666;font-size:.8em;margin-left:12px}
+.hdr{display:flex;align-items:baseline;gap:8px;margin-bottom:10px}
+h2{color:#00bcd4;font-size:.95em;margin:0 0 6px;padding:4px 0;border-bottom:1px solid #222}
+.note{color:#555;font-size:.72em;margin:-4px 0 4px}
+
+/* Grid layouts */
+.row{display:grid;gap:10px;margin-bottom:10px}
+.r2{grid-template-columns:1fr 1fr}
+.r3{grid-template-columns:1fr 1fr 1fr}
+.r23{grid-template-columns:2fr 3fr}
+.r32{grid-template-columns:3fr 2fr}
+.box{background:#111118;border:1px solid #1e1e2e;border-radius:6px;padding:10px;overflow:hidden}
+
+/* Stats strip */
+.stats{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
+.st{background:#111118;border:1px solid #1e1e2e;border-radius:5px;padding:6px 12px;text-align:center;flex:1;min-width:90px}
+.st .v{font-size:1.3em;font-weight:bold;color:#ffd700}
+.st .l{font-size:.6em;color:#666;margin-top:1px}
+.st .v.g{color:#4caf50}.st .v.r{color:#f44336}.st .v.b{color:#42a5f5}
+
+/* Flow */
+.flow{display:flex;align-items:center;justify-content:center;gap:6px;padding:8px}
+.fb{background:#13131f;border:1px solid #282838;border-radius:6px;padding:8px 12px;text-align:center}
+.fb .l{font-size:.6em;color:#666}.fb .v{font-size:1.1em;font-weight:bold;margin-top:2px}
+.fa{color:#444;font-size:1.2em}
+
+/* Bars */
+.bar{display:flex;align-items:center;margin:2px 0}
+.bl{width:140px;font-size:.7em;color:#888;text-align:right;padding-right:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0}
+.bf{height:14px;border-radius:2px;min-width:1px}.bv{font-size:.65em;color:#666;padding-left:6px;white-space:nowrap}
+
+/* Tables */
+table{width:100%;border-collapse:collapse;font-size:.75em}
+th{background:#12121e;color:#666;text-align:left;padding:4px 6px;font-weight:normal;text-transform:uppercase;font-size:.65em;letter-spacing:.5px}
+td{padding:3px 6px;border-bottom:1px solid #151520}
+tr:hover{background:#151520}
+.p{color:#4caf50}.n{color:#f44336}
+
+/* Chips */
+.tc{padding:2px 7px;border-radius:10px;font-size:.65em;font-weight:bold;display:inline-block}
+.tc-penny{background:#1a1a1a;color:#777;border:1px solid #333}
+.tc-budget{background:#0a1f0a;color:#4caf50;border:1px solid #2e7d32}
+.tc-stress{background:#1f140a;color:#ff9800;border:1px solid #e65100}
+.tc-mid{background:#1f1f0a;color:#ffeb3b;border:1px solid #f9a825}
+.tc-premium{background:#1f0a1f;color:#e040fb;border:1px solid #7b1fa2}
+.tc-creative{background:#0a1f1f;color:#26c6da;border:1px solid #00838f}
+
+.wb{background:#2e7d32;color:#fff;padding:1px 6px;border-radius:8px;font-size:.7em}
+.rb{background:#1a237e;color:#90caf9;padding:1px 6px;border-radius:8px;font-size:.7em}
+.sc{padding:1px 5px;border-radius:2px;font-size:.65em;display:inline-block;margin:1px}
+.sh{background:#1b5e20;color:#a5d6a7}.sm{background:#3a2e00;color:#ffe082}.sl{background:#3a0000;color:#ef9a9a}
+
+/* Scatter */
+.scat{position:relative;height:200px}
+.dot{position:absolute;width:8px;height:8px;border-radius:50%;cursor:pointer}
+.dot:hover{transform:scale(2);z-index:10}
+.ax{position:absolute;color:#444;font-size:.6em}
+
+/* Market grid */
+.mg{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:6px}
+.mc{background:#111118;border:1px solid #1e1e2e;border-radius:5px;padding:8px;font-size:.78em}
+.mc .pr{color:#aaa;font-style:italic;font-size:.85em;margin:3px 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mc .sr{display:flex;gap:3px;flex-wrap:wrap;margin-top:4px}
+
+/* Collapsible */
+details>summary{cursor:pointer;color:#00bcd4;font-size:.9em;padding:4px 0}
+details>summary:hover{color:#4dd0e1}
+</style>
+</head>
+<body>
+<div class="hdr"><h1>BAZAAR EXCHANGE__MOCK_BADGE__</h1><span class="sub">__TIMESTAMP__ — __N_MARKETS__ markets, __N_AGENTS__ agents</span></div>
+
+<div class="stats" id="stats"></div>
+<div class="box" style="margin-bottom:10px"><div class="flow" id="flow"></div></div>
+
+<div class="row r3">
+  <div class="box"><h2>QUALITY GAP</h2><div class="note">Winner vs avg score — exchange's value-add</div><div id="qgap" style="max-height:280px;overflow-y:auto"></div></div>
+  <div class="box"><h2>PRICE-QUALITY FRONTIER</h2><div class="note">Each dot = settled market</div><div class="scat" id="scatter"></div></div>
+  <div class="box"><h2>COST ABSORPTION</h2><div class="note">Agents spend Nx what buyer pays</div><div id="absorb" style="max-height:280px;overflow-y:auto"></div></div>
+</div>
+
+<div class="row r2">
+  <div class="box">
+    <h2>AGENT PnL LEADERBOARD</h2>
+    <div id="pnl" style="margin-bottom:6px"></div>
+    <div style="max-height:200px;overflow-y:auto"><table id="atbl"><thead><tr><th>#</th><th>Agent</th><th>Strat</th><th>W</th><th>L</th><th>W%</th><th>Avg</th><th>Rev</th><th>Costs</th><th>PnL</th></tr></thead><tbody></tbody></table></div>
+  </div>
+  <div>
+    <div class="row r2" style="margin-bottom:10px">
+      <div class="box"><h2>TIER BREAKDOWN</h2><div id="ttbl"></div></div>
+      <div class="box"><h2>COMPETITIVE DEPTH</h2><div id="depth"></div></div>
+    </div>
+    <div class="box"><h2>REVISION ROI</h2><div class="note">Initial → revised score</div><div id="rev" style="max-height:180px;overflow-y:auto"></div></div>
+  </div>
+</div>
+
+<div class="row r2">
+  <div class="box"><h2>SCORE DISTRIBUTION BY TIER</h2><div id="sdist" style="display:flex;gap:12px;flex-wrap:wrap"></div></div>
+  <div class="box">
+    <details open><summary>MARKET-BY-MARKET RESULTS (__N_MARKETS__ markets)</summary>
+    <div class="mg" id="mlist" style="margin-top:6px"></div>
+    </details>
+  </div>
+</div>
+
+<script>
+const D=__REPORT_JSON__;
+const E=D.economics,S=D.markets.filter(m=>m.status==='settled'),T=D.markets.filter(m=>m.status==='timeout');
+const A=Object.entries(D.agent_pnl).map(([id,a])=>({id,...a})).sort((a,b)=>b.pnl-a.pnl);
+const TO=['penny','budget','stress','mid','premium','creative'];
+const TC={penny:'#888',budget:'#4caf50',stress:'#ff9800',mid:'#ffeb3b',premium:'#e040fb',creative:'#26c6da'};
+const avg=S.length?(S.reduce((s,m)=>s+m.score,0)/S.length).toFixed(1):'—';
+
+document.getElementById('stats').innerHTML=[
+['Markets',D.metadata.n_markets,''],['Settled',S.length,'g'],['Timeouts',T.length,T.length?'r':''],
+['Avg Score',avg+'/10',''],['Volume','$'+E.total_buyer_spend.toFixed(2),'g'],
+['Agent Costs','$'+E.total_agent_costs.toFixed(2),'r'],['Fees','$'+E.exchange_fees.toFixed(2),'b'],
+['Q.Gap','+'+E.avg_quality_gap.toFixed(1),'g'],['Revisions',E.total_revisions+'('+E.successful_revisions+'w)',''],
+].map(([l,v,c])=>'<div class="st"><div class="v '+c+'">'+v+'</div><div class="l">'+l+'</div></div>').join('');
+
+const ap=Math.max(0,E.total_agent_revenue-E.total_agent_costs),al=Math.max(0,E.total_agent_costs-E.total_agent_revenue);
+document.getElementById('flow').innerHTML='<div class="fb"><div class="l">BUYER</div><div class="v" style="color:#ffd700">$'+E.total_buyer_spend.toFixed(2)+'</div></div><div class="fa">→</div><div class="fb"><div class="l">FEE 1.5%</div><div class="v" style="color:#42a5f5">$'+E.exchange_fees.toFixed(2)+'</div></div><div class="fa">→</div><div class="fb"><div class="l">WINNERS</div><div class="v" style="color:#4caf50">$'+E.total_agent_revenue.toFixed(2)+'</div></div><div class="fa">→</div><div class="fb"><div class="l">API COSTS</div><div class="v" style="color:#f44336">$'+E.total_agent_costs.toFixed(2)+'</div></div><div class="fa">→</div><div class="fb"><div class="l">NET '+(ap>0?'PROFIT':'LOSS')+'</div><div class="v" style="color:'+(ap>0?'#4caf50':'#f44336')+'">$'+Math.abs(ap||al).toFixed(2)+'</div></div>';
+
+const qg=S.map(function(m){var sc=m.submissions.map(function(s){return s.final_score}),av=sc.reduce(function(a,b){return a+b},0)/sc.length;return{id:m.market_id,t:m.tier,w:m.score,a:av,g:m.score-av}}).sort(function(a,b){return b.g-a.g});
+var mgx=Math.max.apply(null,qg.map(function(d){return Math.abs(d.g)}).concat([1]));
+document.getElementById('qgap').innerHTML=qg.map(function(d){var w=Math.abs(d.g)/mgx*100,c=d.g>0?'#4caf50':'#f44336';return'<div class="bar"><div class="bl"><span class="tc tc-'+d.t+'">'+d.t+'</span> '+d.id+'</div><div class="bf" style="width:'+w+'%;background:'+c+'"></div><div class="bv"><b style="color:'+c+'">'+(d.g>0?'+':'')+d.g.toFixed(1)+'</b> (w'+d.w+' avg'+d.a.toFixed(1)+')</div></div>'}).join('');
+
+var pcc=document.getElementById('scatter'),mpp=Math.max.apply(null,D.price_quality.map(function(d){return d.price}));
+D.price_quality.forEach(function(d){var x=(d.price/mpp)*90+5,y=95-(d.score/10)*85,e=document.createElement('div');e.className='dot';e.style.cssText='left:'+x+'%;top:'+y+'%;background:'+(TC[d.tier]||'#888');e.title=d.market_id+': $'+d.price+' → '+d.score+'/10';pcc.appendChild(e)});
+
+var ca=D.cost_absorption.sort(function(a,b){return b.ratio-a.ratio}),mrr=Math.max.apply(null,ca.map(function(d){return d.ratio}).concat([1]));
+document.getElementById('absorb').innerHTML=ca.map(function(d){var w=d.ratio/mrr*100;return'<div class="bar"><div class="bl"><span class="tc tc-'+d.tier+'">'+d.tier+'</span> '+d.market_id+'</div><div class="bf" style="width:'+w+'%;background:#f44336"></div><div class="bv">'+d.ratio.toFixed(1)+'x</div></div>'}).join('');
+
+var mpl=Math.max.apply(null,A.map(function(a){return Math.abs(a.pnl)}).concat([.01]));
+document.getElementById('pnl').innerHTML=A.map(function(a){var w=Math.abs(a.pnl)/mpl*100,c=a.pnl>=0?'#4caf50':'#f44336';return'<div class="bar"><div class="bl">'+a.id+'</div><div class="bf" style="width:'+w+'%;background:'+c+'"></div><div class="bv">'+(a.pnl>=0?'+':'')+'$'+a.pnl.toFixed(3)+'</div></div>'}).join('');
+
+document.querySelector('#atbl tbody').innerHTML=A.map(function(a,i){var c=a.pnl>=0?'p':'n';return'<tr><td>'+(i+1)+'</td><td><b>'+a.id+'</b></td><td>'+a.economic_strategy+'</td><td>'+a.wins+'</td><td>'+a.losses+'</td><td>'+(a.win_rate*100).toFixed(0)+'%</td><td>'+a.avg_score.toFixed(1)+'</td><td>'+a.revisions_attempted+'</td><td>$'+a.costs.toFixed(3)+'</td><td class="'+c+'"><b>'+(a.pnl>=0?'+':'')+'$'+a.pnl.toFixed(3)+'</b></td></tr>'}).join('');
+
+document.getElementById('ttbl').innerHTML='<table><thead><tr><th>Tier</th><th>N</th><th>OK</th><th>Fail</th><th>Avg</th><th>Gap</th><th>Vol</th></tr></thead><tbody>'+TO.filter(function(t){return D.tier_summary[t]&&D.tier_summary[t].total>0}).map(function(t){var s=D.tier_summary[t];return'<tr><td><span class="tc tc-'+t+'">'+t+'</span></td><td>'+s.total+'</td><td>'+s.settled+'</td><td class="'+(s.timeouts?'n':'')+'">'+s.timeouts+'</td><td>'+(s.avg_score?s.avg_score.toFixed(1):'—')+'</td><td class="p">+'+s.quality_gap.toFixed(1)+'</td><td>$'+s.total_volume.toFixed(2)+'</td></tr>'}).join('')+'</tbody></table>';
+
+document.getElementById('depth').innerHTML=TO.filter(function(t){return D.tier_summary[t]&&D.tier_summary[t].total>0}).map(function(t){var s=D.tier_summary[t];return'<div style="margin:4px 0"><span style="font-size:.7em;color:'+TC[t]+'">'+t.toUpperCase()+'</span><div class="bar"><div class="bl" style="width:50px">In</div><div class="bf" style="width:'+(s.avg_participants/10*100)+'%;background:#42a5f5;opacity:.5"></div><div class="bv">'+s.avg_participants.toFixed(1)+'</div></div><div class="bar"><div class="bl" style="width:50px">OK</div><div class="bf" style="width:'+(s.avg_qualified/10*100)+'%;background:#4caf50"></div><div class="bv">'+s.avg_qualified.toFixed(1)+'</div></div></div>'}).join('');
+
+var rv=[];D.markets.forEach(function(m){m.submissions.forEach(function(s){if(s.n_revisions>0)rv.push({a:s.agent_id,m:m.market_id,t:m.tier,i:s.initial_score,f:s.final_score,n:s.n_revisions,q:s.qualified})})});
+document.getElementById('rev').innerHTML=rv.length?rv.map(function(d){var c=d.q?'#4caf50':(d.f>d.i?'#ffeb3b':'#f44336');return'<div class="bar"><div class="bl">'+d.a.substring(0,18)+' '+d.m+'</div><div style="display:flex;gap:6px;align-items:center"><span style="color:#888">'+d.i+'</span><span style="color:#444">→'+d.n+'r→</span><span style="color:'+c+';font-weight:bold">'+d.f+'</span>'+(d.q?' <span class="rb">OK</span>':'')+'</div></div>'}).join(''):'<div style="color:#444">None</div>';
+
+var sd={};D.markets.forEach(function(m){m.submissions.forEach(function(s){if(!sd[m.tier])sd[m.tier]=[];sd[m.tier].push(s.final_score)})});
+document.getElementById('sdist').innerHTML=TO.filter(function(t){return sd[t]}).map(function(t){var sc=sd[t],bk=Array(10).fill(0);sc.forEach(function(s){bk[Math.min(s,10)-1]++});var mx=Math.max.apply(null,bk.concat([1]));return'<div style="flex:1;min-width:100px"><div style="font-size:.7em;color:'+TC[t]+'">'+t+' n='+sc.length+' avg='+(sc.reduce(function(a,b){return a+b},0)/sc.length).toFixed(1)+'</div><div style="display:flex;align-items:flex-end;height:50px;gap:1px">'+bk.map(function(c,i){var h=c/mx*50,cl=i>=7?'#4caf50':(i>=5?'#ffeb3b':'#f44336');return'<div style="flex:1;background:'+cl+';height:'+h+'px;border-radius:1px 1px 0 0" title="'+(i+1)+': '+c+'"></div>'}).join('')+'</div><div style="display:flex;font-size:.5em;color:#444">'+bk.map(function(_,i){return'<div style="flex:1;text-align:center">'+(i+1)+'</div>'}).join('')+'</div></div>'}).join('');
+
+document.getElementById('mlist').innerHTML=D.markets.map(function(m){
+var st='';
+if(m.status==='settled'){var rs=m.submissions.filter(function(s){return s.n_revisions>0}),rn=rs.length?' <span class="rb">'+rs.reduce(function(s,r){return s+r.n_revisions},0)+'rev</span>':'';st='<span class="wb">★'+m.winner+'</span> '+m.score+'/10 '+m.elapsed.toFixed(0)+'s'+rn}else st='<span style="color:#f44336">TIMEOUT</span>';
+var sc=(m.submissions||[]).sort(function(a,b){return b.final_score-a.final_score}).slice(0,6).map(function(s){var c=s.final_score>=8?'sh':(s.final_score>=6?'sm':'sl');return'<span class="sc '+c+'">'+s.agent_id.substring(0,12)+' '+s.final_score+(s.n_revisions?' r'+s.n_revisions:'')+'</span>'}).join('');
+return'<div class="mc"><div style="display:flex;justify-content:space-between"><span><span class="tc tc-'+m.tier+'">'+m.tier+'</span> <b>'+m.market_id+'</b></span><span style="color:#555">$'+m.max_price.toFixed(3)+' q≥'+m.min_quality+'</span></div><div class="pr">'+m.prompt+'</div><div style="margin-top:3px">'+st+'</div><div class="sr">'+sc+'</div></div>'}).join('');
+</script>
+</body></html>"""
+
 
 
 def main():
