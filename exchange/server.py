@@ -9,7 +9,10 @@ import threading
 import time
 import uuid
 
+import json as _json
+
 from fastapi import FastAPI, HTTPException, Header
+from fastapi.responses import StreamingResponse
 from openai import OpenAI
 
 from bazaar.types import (
@@ -56,6 +59,24 @@ _judge: Judge | None = None
 # Capped at 10K entries to avoid unbounded growth.
 _feedback_store: dict[tuple[str, str], dict] = {}
 _FEEDBACK_STORE_MAX = 10_000
+
+# SSE event bus — subscribers receive real-time exchange events
+_event_subscribers: list[asyncio.Queue] = []
+_event_lock = threading.Lock()
+
+
+def emit_event(event_type: str, **data):
+    """Push an event to all SSE subscribers."""
+    event = {"type": event_type, "timestamp": time.time(), **data}
+    with _event_lock:
+        dead = []
+        for q in _event_subscribers:
+            try:
+                q.put_nowait(event)
+            except asyncio.QueueFull:
+                dead.append(q)
+        for q in dead:
+            _event_subscribers.remove(q)
 
 
 def _get_judge() -> Judge:
@@ -112,6 +133,10 @@ async def call_exchange(
     with _games_lock:
         active_games[request_id] = state
 
+    emit_event("task_submitted", request_id=request_id,
+               task=llm.input[:100], max_price=exc.max_price,
+               agents=registry.count)
+
     try:
         results = await run_game(
             input_text=llm.input,
@@ -154,6 +179,17 @@ def _persist_feedback(state: GameState):
                 "winner": winner_id,
                 "won": agent_id == winner_id,
             }
+            emit_event("scored", request_id=state.request_id,
+                       agent_id=agent_id, score=sub.score,
+                       won=(agent_id == winner_id))
+    if winner_id:
+        winner_sub = state.submissions.get(winner_id)
+        latency_ms = (time.time() - state.start_time) * 1000
+        emit_event("winner", request_id=state.request_id,
+                   agent_id=winner_id, task=state.input[:100],
+                   max_price=state.max_price,
+                   score=winner_sub.score if winner_sub else 0,
+                   latency_ms=latency_ms)
     # Evict oldest entries if over cap
     while len(_feedback_store) > _FEEDBACK_STORE_MAX:
         oldest = next(iter(_feedback_store))
@@ -169,6 +205,7 @@ async def register_agent(reg: AgentRegistration):
         agent_id=reg.agent_id,
         callback_url=reg.callback_url,
     )
+    emit_event("agent_registered", agent_id=agent.agent_id)
     logger.info(f"Registered agent: {agent.agent_id} @ {agent.callback_url}")
     return {"status": "registered", "agent_id": agent.agent_id}
 
@@ -184,6 +221,7 @@ async def submit_work(request_id: str, sub: SubmissionPayload):
     if not accepted:
         raise HTTPException(400, "Submission rejected (market closed)")
 
+    emit_event("submission", request_id=request_id, agent_id=sub.agent_id)
     logger.info(f"[{request_id}] Submission from {sub.agent_id}")
     return {"status": "accepted", "agent_id": sub.agent_id}
 
@@ -297,3 +335,37 @@ async def exchange_status():
         "completed_markets": len(market_log_store.get_all()),
         **totals,
     }
+
+
+# ── SSE event stream ────────────────────────────────────────────────
+
+@app.get("/events")
+async def event_stream():
+    """Server-Sent Events stream of real-time exchange events.
+
+    Used by the TUI dashboard to display live market activity.
+    """
+    q: asyncio.Queue = asyncio.Queue(maxsize=500)
+    with _event_lock:
+        _event_subscribers.append(q)
+
+    async def generate():
+        try:
+            while True:
+                try:
+                    event = await asyncio.wait_for(q.get(), timeout=30.0)
+                    yield f"data: {_json.dumps(event)}\n\n"
+                except asyncio.TimeoutError:
+                    yield f": keepalive\n\n"
+        except asyncio.CancelledError:
+            pass
+        finally:
+            with _event_lock:
+                if q in _event_subscribers:
+                    _event_subscribers.remove(q)
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
+    )
