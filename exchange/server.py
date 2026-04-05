@@ -51,6 +51,12 @@ active_games: dict[str, GameState] = {}
 _games_lock = threading.Lock()
 _judge: Judge | None = None
 
+# Persistent feedback store — survives game completion so agents can learn.
+# Maps (request_id, agent_id) → {score, feedback, task, winner}
+# Capped at 10K entries to avoid unbounded growth.
+_feedback_store: dict[tuple[str, str], dict] = {}
+_FEEDBACK_STORE_MAX = 10_000
+
 
 def _get_judge() -> Judge:
     global _judge
@@ -127,10 +133,31 @@ async def call_exchange(
     except TimeoutError as e:
         raise HTTPException(504, str(e))
     finally:
+        # Persist all scores to feedback store before removing game
+        _persist_feedback(state)
         with _games_lock:
             active_games.pop(request_id, None)
 
     return results
+
+
+def _persist_feedback(state: GameState):
+    """Copy all scores from a completed game into the persistent feedback store."""
+    winner_id = state.winner
+    for agent_id, sub in state.submissions.items():
+        if sub.score is not None:
+            key = (state.request_id, agent_id)
+            _feedback_store[key] = {
+                "score": sub.score,
+                "feedback": sub.feedback or "",
+                "task": state.input[:500],
+                "winner": winner_id,
+                "won": agent_id == winner_id,
+            }
+    # Evict oldest entries if over cap
+    while len(_feedback_store) > _FEEDBACK_STORE_MAX:
+        oldest = next(iter(_feedback_store))
+        del _feedback_store[oldest]
 
 
 # ── Agent endpoints ───────────────────────────────────────────────────
@@ -169,32 +196,39 @@ async def get_feedback(
 ):
     """Agent polls for judge feedback on THEIR OWN submission only.
 
+    Checks active games first, then the persistent feedback store.
     Agents must include X-Agent-Id header matching the path agent_id
     to prevent probing other agents' scores.
     """
     if x_agent_id is not None and x_agent_id != agent_id:
         raise HTTPException(403, "Can only access own feedback")
 
+    # Check active game first
     state = active_games.get(request_id)
-    if not state:
-        raise HTTPException(404, "No active game")
+    if state:
+        sub = state.submissions.get(agent_id)
+        if not sub:
+            return {"status": "no_submission"}
+        if sub.score is None:
+            return {"status": "pending"}
+        return {
+            "status": "scored",
+            "score": sub.score,
+            "feedback": sub.feedback or "",
+            "won": agent_id == state.winner,
+        }
 
-    sub = state.submissions.get(agent_id)
-    if not sub:
-        return {"status": "no_submission"}
+    # Check persistent feedback store (game already ended)
+    stored = _feedback_store.get((request_id, agent_id))
+    if stored:
+        return {
+            "status": "scored",
+            "score": stored["score"],
+            "feedback": stored["feedback"],
+            "won": stored["won"],
+        }
 
-    if sub.score is None:
-        return {"status": "pending"}
-
-    if sub.score >= state.min_quality:
-        return {"status": "qualified", "score": sub.score}
-
-    return {
-        "status": "feedback",
-        "score": sub.score,
-        "feedback": sub.feedback,
-        "can_revise": not state.done,
-    }
+    return {"status": "not_found"}
 
 
 @app.post("/notify/{request_id}")
