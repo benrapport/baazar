@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 STRATEGIES_PATH = Path(__file__).parent / "strategies.json"
 EXCHANGE_URL = os.environ.get("BAZAAR_EXCHANGE_URL", "http://localhost:8000")
 REWRITE_MODEL = "gpt-4o-mini"
+MAX_REVISIONS = 2  # max revision attempts per submission
 
 
 def load_strategies() -> list[dict]:
@@ -91,10 +92,20 @@ class ImageFleet:
 
     async def _handle_request(self, agent_id: str, strategy: dict,
                               payload: BroadcastPayload):
-        """Rewrite prompt using strategy, pick model, generate image, submit."""
+        """Rewrite prompt, generate image, submit, then revise if score is low.
+
+        Revision loop:
+        1. Submit initial image
+        2. Poll for score (within the game window)
+        3. If score < min_quality and market still open and budget allows:
+           - LLM rewrites prompt incorporating judge feedback
+           - Regenerate image and resubmit
+        4. Up to MAX_REVISIONS revision attempts
+        """
         max_price = payload.max_price
         user_prompt = payload.input
         request_id = payload.request_id
+        min_quality = payload.min_quality
         memory = self._memories[agent_id]
 
         # Pick model config based on economic strategy
@@ -110,50 +121,90 @@ class ImageFleet:
         has_memory = len(memory.scored_attempts) > 0
         thinking_cost = estimate_thinking_cost(has_memory)
         image_cost = option["cost"]
-        total_cost = image_cost + thinking_cost
-        margin = max_price - total_cost
+        cost_per_attempt = image_cost + thinking_cost
+        total_cost = cost_per_attempt  # tracks cumulative cost across revisions
 
-        if margin < 0:
+        if max_price - total_cost < 0:
             logger.info(f"[{agent_id}] PASS — negative margin at ${max_price}")
             await self._notify(request_id, agent_id, "pass", "negative margin")
             return
 
         logger.info(
             f"[{agent_id}] FILL — {model} {size} "
-            f"img=${image_cost:.4f} think=${thinking_cost:.4f} "
-            f"total=${total_cost:.4f} margin=${margin:.4f}"
+            f"cost=${cost_per_attempt:.4f} margin=${max_price - total_cost:.4f}"
         )
         await self._notify(request_id, agent_id, "fill")
 
         try:
-            # Rewrite prompt using agent's strategy + memory
+            # Initial submission
             rewritten = await asyncio.to_thread(
                 self._rewrite_prompt, strategy, user_prompt, model, memory
             )
-
-            # Record attempt before we know the score
             memory.record_attempt(request_id, user_prompt, rewritten, model)
 
-            # Generate image
             data_uri = await asyncio.to_thread(
                 generate_image, rewritten, model, size, quality
             )
-
-            # Submit to exchange
             await self._submit(request_id, agent_id, data_uri)
 
-            # Poll for feedback asynchronously (don't block the handler)
+            # Revision loop: poll for score, revise if below threshold
+            for revision in range(1, MAX_REVISIONS + 1):
+                score_data = await self._poll_score_fast(request_id, agent_id)
+                if not score_data:
+                    break  # game ended or couldn't get score
+
+                score = score_data.get("score", 0)
+                feedback = score_data.get("feedback", "")
+                won = score_data.get("won", False)
+
+                if won or score >= min_quality:
+                    # Good enough or already won — no revision needed
+                    logger.info(
+                        f"[{agent_id}] r{revision-1} Score: {score}/10"
+                        + (" [WON]" if won else " [QUALIFIED]")
+                    )
+                    memory.record_score(request_id, score, feedback, won)
+                    return
+
+                # Check if revision is economically viable
+                revised_total = total_cost + cost_per_attempt
+                if revised_total >= max_price:
+                    logger.info(
+                        f"[{agent_id}] r{revision-1} Score: {score}/10 — "
+                        f"skip revision (cost ${revised_total:.4f} >= ${max_price})"
+                    )
+                    memory.record_score(request_id, score, feedback, won)
+                    return
+
+                # Revise: rewrite prompt incorporating judge feedback
+                logger.info(
+                    f"[{agent_id}] r{revision-1} Score: {score}/10 — "
+                    f"REVISING (judge: {feedback[:60]})"
+                )
+
+                rewritten = await asyncio.to_thread(
+                    self._revise_prompt, strategy, user_prompt, rewritten,
+                    score, feedback, model
+                )
+
+                data_uri = await asyncio.to_thread(
+                    generate_image, rewritten, model, size, quality
+                )
+                await self._submit(request_id, agent_id, data_uri)
+                total_cost = revised_total
+
+            # After revision loop, do final async feedback poll for memory
             asyncio.create_task(
-                self._poll_feedback(request_id, agent_id, memory)
+                self._poll_feedback_for_memory(request_id, agent_id, memory)
             )
 
         except Exception as e:
             logger.error(f"[{agent_id}] Failed: {e}")
 
-    async def _poll_feedback(self, request_id: str, agent_id: str,
-                             memory: AgentMemory):
-        """Poll the exchange for our score after submission. Retry a few times."""
-        for delay in [3, 5, 10, 15, 20]:
+    async def _poll_score_fast(self, request_id: str, agent_id: str,
+                               ) -> dict | None:
+        """Poll for score quickly during the game window (for revision decisions)."""
+        for delay in [3, 4, 5, 6]:
             await asyncio.sleep(delay)
             try:
                 async with httpx.AsyncClient(timeout=5.0) as client:
@@ -165,23 +216,36 @@ class ImageFleet:
                         continue
                     data = resp.json()
                     if data.get("status") == "scored":
-                        score = data["score"]
-                        feedback = data.get("feedback", "")
-                        won = data.get("won", False)
-                        memory.record_score(request_id, score, feedback, won)
-                        avg = memory.get_avg_score()
-                        logger.info(
-                            f"[{agent_id}] Score: {score}/10"
-                            + (" [WON]" if won else "")
-                            + (f" (avg: {avg:.1f})" if avg else "")
-                        )
+                        return data
+                    if data.get("status") in ("not_found",):
+                        return None  # game ended
+            except Exception:
+                pass
+        return None
+
+    async def _poll_feedback_for_memory(self, request_id: str, agent_id: str,
+                                         memory: AgentMemory):
+        """Final async poll to store score in memory (post-game)."""
+        for delay in [2, 5, 10, 15]:
+            await asyncio.sleep(delay)
+            try:
+                async with httpx.AsyncClient(timeout=5.0) as client:
+                    resp = await client.get(
+                        f"{self.exchange_url}/feedback/{request_id}/{agent_id}",
+                        headers={"X-Agent-Id": agent_id},
+                    )
+                    if resp.status_code != 200:
+                        continue
+                    data = resp.json()
+                    if data.get("status") == "scored":
+                        memory.record_score(
+                            request_id, data["score"],
+                            data.get("feedback", ""), data.get("won", False))
                         return
                     if data.get("status") == "not_found":
-                        # Game ended, no score for us (we were too slow)
                         return
             except Exception:
                 pass
-        logger.debug(f"[{agent_id}] Feedback timeout for {request_id}")
 
     def _rewrite_prompt(self, strategy: dict, user_prompt: str,
                         model: str, memory: AgentMemory | None = None) -> str:
@@ -224,6 +288,36 @@ class ImageFleet:
         except Exception as e:
             logger.warning(f"[{strategy['id']}] Rewrite failed, using original: {e}")
             return user_prompt
+
+    def _revise_prompt(self, strategy: dict, original_prompt: str,
+                       previous_rewrite: str, score: int,
+                       feedback: str, model: str) -> str:
+        """Rewrite the prompt incorporating judge feedback on what was wrong."""
+        system = (
+            f"{strategy['system_prompt']}\n\n"
+            f"You are REVISING an image generation prompt for the {model} model.\n\n"
+            f"The original task was: \"{original_prompt}\"\n"
+            f"Your previous prompt was: \"{previous_rewrite}\"\n"
+            f"The judge scored it {score}/10 and said: \"{feedback}\"\n\n"
+            f"Fix the issues the judge identified. Keep what worked. "
+            f"Output ONLY the revised prompt, nothing else. "
+            f"Keep it under 500 characters."
+        )
+        try:
+            resp = self.llm_client.chat.completions.create(
+                model=REWRITE_MODEL,
+                max_completion_tokens=300,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": f"Revise to fix: {feedback}"},
+                ],
+            )
+            revised = resp.choices[0].message.content.strip()
+            logger.debug(f"[{strategy['id']}] Revised: {revised[:80]}...")
+            return revised
+        except Exception as e:
+            logger.warning(f"[{strategy['id']}] Revision failed: {e}")
+            return previous_rewrite
 
     async def _submit(self, request_id: str, agent_id: str, work: str):
         """POST work submission to exchange."""

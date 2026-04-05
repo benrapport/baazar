@@ -55,6 +55,10 @@ def estimate_thinking_cost(has_memory: bool = False) -> float:
     return PROMPT_REWRITE_COST_WITH_MEMORY if has_memory else PROMPT_REWRITE_COST_BASE
 
 
+# Revision cost: another thinking call (with feedback context) + image regen
+REVISION_THINKING_COST = 0.0003  # similar to memory-context rewrite
+
+
 # Total per-task overhead (backward compat)
 PROMPT_REWRITE_COST = PROMPT_REWRITE_COST_WITH_MEMORY  # conservative estimate
 
