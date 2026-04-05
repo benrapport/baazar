@@ -109,11 +109,24 @@ def _build_vision_messages(task: str, image_data: str,
     criteria_text = "\n".join(f"- {c}" for c in criteria)
 
     system_prompt = (
-        "You are scoring AI-generated images for a marketplace. "
-        "Rate the image 1-10.\n\n"
+        "You are a strict art director scoring AI-generated images for "
+        "a competitive marketplace. Rate the image 1-10.\n\n"
         f"Scoring criteria:\n{criteria_text}\n\n"
-        "Be a fair but demanding judge. 7 = good professional quality. "
-        "5 = mediocre. 9-10 = excellent.\n\n"
+        "Scoring guide — be demanding, use the FULL range:\n"
+        "  1-3: Fails the prompt. Wrong subject, incoherent, or broken.\n"
+        "  4-5: Recognizable attempt but poor quality, missing key elements, "
+        "or generic/bland output.\n"
+        "  6: Adequate. Gets the basics right but nothing impressive.\n"
+        "  7: Good. Professional quality, all elements present, solid execution.\n"
+        "  8: Very good. Strong composition, mood, and detail. "
+        "Minor imperfections only.\n"
+        "  9: Excellent. Striking image that exceeds expectations. "
+        "Would stop someone scrolling.\n"
+        "  10: Masterwork. Gallery-quality, emotionally powerful, technically flawless.\n\n"
+        "Penalize heavily: wrong subject, missing requested elements, "
+        "AI artifacts (extra fingers, melted text), flat/generic compositions.\n"
+        "Reward: accurate prompt interpretation, strong lighting, emotional impact, "
+        "creative interpretation, fine detail.\n\n"
         "Respond with ONLY valid JSON:\n"
         '{"score": <1-10>, "feedback": "<1-2 sentence feedback>"}'
     )
