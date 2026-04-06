@@ -317,7 +317,7 @@ def build_report(markets: list[dict], results: list[dict],
 
 
 def generate_html(report: dict, path: Path):
-    """Generate widescreen dashboard HTML report."""
+    """Generate widescreen dashboard HTML report with advanced visualizations."""
 
     mock_badge = ' <span class="mock">MOCK DATA</span>' if report['metadata'].get('is_mock') else ''
     report_json = json.dumps(report)
@@ -364,7 +364,7 @@ h2{color:#00bcd4;font-size:.95em;margin:0 0 6px;padding:4px 0;border-bottom:1px 
 .st .v.g{color:#4caf50}.st .v.r{color:#f44336}.st .v.b{color:#42a5f5}
 
 /* Flow */
-.flow{display:flex;align-items:center;justify-content:center;gap:6px;padding:8px}
+.flow{display:flex;align-items:center;justify-content:center;gap:6px;padding:8px;font-size:.85em}
 .fb{background:#13131f;border:1px solid #282838;border-radius:6px;padding:8px 12px;text-align:center}
 .fb .l{font-size:.6em;color:#666}.fb .v{font-size:1.1em;font-weight:bold;margin-top:2px}
 .fa{color:#444;font-size:1.2em}
@@ -395,11 +395,19 @@ tr:hover{background:#151520}
 .sc{padding:1px 5px;border-radius:2px;font-size:.65em;display:inline-block;margin:1px}
 .sh{background:#1b5e20;color:#a5d6a7}.sm{background:#3a2e00;color:#ffe082}.sl{background:#3a0000;color:#ef9a9a}
 
-/* Scatter */
-.scat{position:relative;height:200px}
-.dot{position:absolute;width:8px;height:8px;border-radius:50%;cursor:pointer}
-.dot:hover{transform:scale(2);z-index:10}
-.ax{position:absolute;color:#444;font-size:.6em}
+/* Scatter plots */
+.scat{position:relative;height:220px;background:#0f0f16;border:1px solid #1e1e2e;border-radius:4px;margin:0}
+.scat-canvas{width:100%;height:100%;display:block;background:#0f0f16}
+.dot{position:absolute;border-radius:50%;cursor:pointer;transition:all .15s}
+.dot:hover{z-index:10;filter:drop-shadow(0 0 4px rgba(255,215,0,.6))}
+.ax{position:absolute;color:#555;font-size:.55em;font-weight:normal}
+.ax-x{bottom:-14px;white-space:nowrap}
+.ax-y{right:100%;text-align:right;padding-right:4px;top:50%;transform:translateY(-50%)}
+.pline{position:absolute;background:transparent;border:1px dashed #333}
+
+/* Sparkline */
+.spark{display:flex;gap:1px;align-items:flex-end;height:14px}
+.sb{flex:1;min-width:2px;border-radius:1px}
 
 /* Market grid */
 .mg{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:6px}
@@ -419,28 +427,26 @@ details>summary:hover{color:#4dd0e1}
 <div class="box" style="margin-bottom:10px"><div class="flow" id="flow"></div></div>
 
 <div class="row r3">
-  <div class="box"><h2>QUALITY GAP</h2><div class="note">Winner vs avg score — exchange's value-add</div><div id="qgap" style="max-height:280px;overflow-y:auto"></div></div>
-  <div class="box"><h2>PRICE-QUALITY FRONTIER</h2><div class="note">Each dot = settled market</div><div class="scat" id="scatter"></div></div>
-  <div class="box"><h2>COST ABSORPTION</h2><div class="note">Agents spend Nx what buyer pays</div><div id="absorb" style="max-height:280px;overflow-y:auto"></div></div>
+  <div class="box"><h2>PARETO FRONTIER</h2><div class="note">Cost vs Quality efficiency</div><div class="scat" id="pareto"></div></div>
+  <div class="box"><h2>SCORE VS WIN RATE</h2><div class="note">Quality's conversion to wins</div><div class="scat" id="scatter2"></div></div>
+  <div class="box"><h2>REVISION IMPACT</h2><div class="note">Before → after scores</div><div class="scat" id="revplot"></div></div>
 </div>
 
 <div class="row r2">
   <div class="box">
     <h2>AGENT PnL LEADERBOARD</h2>
     <div id="pnl" style="margin-bottom:6px"></div>
-    <div style="max-height:200px;overflow-y:auto"><table id="atbl"><thead><tr><th>#</th><th>Agent</th><th>Strat</th><th>W</th><th>L</th><th>W%</th><th>Avg</th><th>Rev</th><th>Costs</th><th>PnL</th></tr></thead><tbody></tbody></table></div>
+    <div style="max-height:220px;overflow-y:auto"><table id="atbl"><thead><tr><th>#</th><th>Agent</th><th>Strat</th><th>W</th><th>L</th><th>W%</th><th>Avg</th><th>Trend</th><th>Costs</th><th>PnL</th></tr></thead><tbody></tbody></table></div>
   </div>
   <div>
     <div class="row r2" style="margin-bottom:10px">
-      <div class="box"><h2>TIER BREAKDOWN</h2><div id="ttbl"></div></div>
-      <div class="box"><h2>COMPETITIVE DEPTH</h2><div id="depth"></div></div>
+      <div class="box"><h2>TIER BREAKDOWN</h2><div id="ttbl" style="max-height:160px;overflow-y:auto"></div></div>
+      <div class="box"><h2>SCORE DISTRIBUTION</h2><div id="sdist" style="display:flex;flex-direction:column;gap:6px"></div></div>
     </div>
-    <div class="box"><h2>REVISION ROI</h2><div class="note">Initial → revised score</div><div id="rev" style="max-height:180px;overflow-y:auto"></div></div>
   </div>
 </div>
 
-<div class="row r2">
-  <div class="box"><h2>SCORE DISTRIBUTION BY TIER</h2><div id="sdist" style="display:flex;gap:12px;flex-wrap:wrap"></div></div>
+<div class="row r1">
   <div class="box">
     <details open><summary>MARKET-BY-MARKET RESULTS (__N_MARKETS__ markets)</summary>
     <div class="mg" id="mlist" style="margin-top:6px"></div>
@@ -450,52 +456,101 @@ details>summary:hover{color:#4dd0e1}
 
 <script>
 const D=__REPORT_JSON__;
-const E=D.economics,S=D.markets.filter(m=>m.status==='settled'),T=D.markets.filter(m=>m.status==='timeout');
-const A=Object.entries(D.agent_pnl).map(([id,a])=>({id,...a})).sort((a,b)=>b.pnl-a.pnl);
+const E=D.economics,S=D.markets.filter(function(m){return m.status==='settled'}),T=D.markets.filter(function(m){return m.status==='timeout'});
+const A=Object.entries(D.agent_pnl).map(function(kv){var id=kv[0],a=kv[1];return Object.assign({id:id},a)}).sort(function(a,b){return b.pnl-a.pnl});
 const TO=['penny','budget','stress','mid','premium','creative'];
 const TC={penny:'#888',budget:'#4caf50',stress:'#ff9800',mid:'#ffeb3b',premium:'#e040fb',creative:'#26c6da'};
-const avg=S.length?(S.reduce((s,m)=>s+m.score,0)/S.length).toFixed(1):'—';
+const avg=S.length?(S.reduce(function(s,m){return s+m.score},0)/S.length).toFixed(1):'—';
 
 document.getElementById('stats').innerHTML=[
 ['Markets',D.metadata.n_markets,''],['Settled',S.length,'g'],['Timeouts',T.length,T.length?'r':''],
 ['Avg Score',avg+'/10',''],['Volume','$'+E.total_buyer_spend.toFixed(2),'g'],
 ['Agent Costs','$'+E.total_agent_costs.toFixed(2),'r'],['Fees','$'+E.exchange_fees.toFixed(2),'b'],
 ['Q.Gap','+'+E.avg_quality_gap.toFixed(1),'g'],['Revisions',E.total_revisions+'('+E.successful_revisions+'w)',''],
-].map(([l,v,c])=>'<div class="st"><div class="v '+c+'">'+v+'</div><div class="l">'+l+'</div></div>').join('');
+].map(function(kv){var l=kv[0],v=kv[1],c=kv[2];return '<div class="st"><div class="v '+c+'">'+v+'</div><div class="l">'+l+'</div></div>'}).join('');
 
 const ap=Math.max(0,E.total_agent_revenue-E.total_agent_costs),al=Math.max(0,E.total_agent_costs-E.total_agent_revenue);
 document.getElementById('flow').innerHTML='<div class="fb"><div class="l">BUYER</div><div class="v" style="color:#ffd700">$'+E.total_buyer_spend.toFixed(2)+'</div></div><div class="fa">→</div><div class="fb"><div class="l">FEE 1.5%</div><div class="v" style="color:#42a5f5">$'+E.exchange_fees.toFixed(2)+'</div></div><div class="fa">→</div><div class="fb"><div class="l">WINNERS</div><div class="v" style="color:#4caf50">$'+E.total_agent_revenue.toFixed(2)+'</div></div><div class="fa">→</div><div class="fb"><div class="l">API COSTS</div><div class="v" style="color:#f44336">$'+E.total_agent_costs.toFixed(2)+'</div></div><div class="fa">→</div><div class="fb"><div class="l">NET '+(ap>0?'PROFIT':'LOSS')+'</div><div class="v" style="color:'+(ap>0?'#4caf50':'#f44336')+'">$'+Math.abs(ap||al).toFixed(2)+'</div></div>';
 
-const qg=S.map(function(m){var sc=m.submissions.map(function(s){return s.final_score}),av=sc.reduce(function(a,b){return a+b},0)/sc.length;return{id:m.market_id,t:m.tier,w:m.score,a:av,g:m.score-av}}).sort(function(a,b){return b.g-a.g});
-var mgx=Math.max.apply(null,qg.map(function(d){return Math.abs(d.g)}).concat([1]));
-document.getElementById('qgap').innerHTML=qg.map(function(d){var w=Math.abs(d.g)/mgx*100,c=d.g>0?'#4caf50':'#f44336';return'<div class="bar"><div class="bl"><span class="tc tc-'+d.t+'">'+d.t+'</span> '+d.id+'</div><div class="bf" style="width:'+w+'%;background:'+c+'"></div><div class="bv"><b style="color:'+c+'">'+(d.g>0?'+':'')+d.g.toFixed(1)+'</b> (w'+d.w+' avg'+d.a.toFixed(1)+')</div></div>'}).join('');
+function drawScatter(container,xLabel,yLabel,points){
+  var w=container.offsetWidth-2,h=220;
+  var svg='<svg width="100%" height="'+h+'" viewBox="0 0 '+w+' '+h+'" style="position:absolute;left:0;top:0">';
+  var xs=points.map(function(p){return p.x}),ys=points.map(function(p){return p.y});
+  var xmin=Math.min.apply(null,xs),xmax=Math.max.apply(null,xs),ymin=Math.min.apply(null,ys),ymax=Math.max.apply(null,ys);
+  var px=function(x){return 40+(x-xmin)/(xmax-xmin||1)*0.85*w};
+  var py=function(y){return h-40-(y-ymin)/(ymax-ymin||1)*0.8*h};
+  svg+='<line x1="40" y1="'+(h-40)+'" x2="'+(w-10)+'" y2="'+(h-40)+'" stroke="#333" stroke-width="1"/>';
+  svg+='<line x1="40" y1="10" x2="40" y2="'+(h-40)+'" stroke="#333" stroke-width="1"/>';
+  for(var i=0;i<=5;i++){
+    var x=40+i/5*0.85*w,lbl=((xmin+i/5*(xmax-xmin))*100|0)/100;
+    svg+='<text x="'+x+'" y="'+(h-25)+'" font-size="10" fill="#555" text-anchor="middle">'+lbl+'</text>';
+  }
+  for(var i=0;i<=5;i++){
+    var y=h-40-i/5*0.8*h,lbl=((ymin+i/5*(ymax-ymin))*100|0)/100;
+    svg+='<text x="35" y="'+y+'" font-size="10" fill="#555" text-anchor="end" dominant-baseline="middle">'+lbl+'</text>';
+  }
+  points.forEach(function(p){
+    var x=px(p.x),y=py(p.y),r=Math.sqrt(p.size||1)*2+2;
+    svg+='<circle cx="'+x+'" cy="'+y+'" r="'+r+'" fill="'+p.color+'" opacity="0.7" stroke="none"/>';
+  });
+  svg+='</svg>';
+  svg+='<div style="position:relative;width:100%;height:'+h+'px;background:#0f0f16;border:1px solid #1e1e2e;border-radius:4px">'+svg;
+  svg+='<div class="ax ax-x" style="left:40px;right:10px;text-align:center">'+xLabel+'</div>';
+  svg+='<div class="ax ax-y">'+yLabel+'</div></div>';
+  container.innerHTML=svg;
+}
 
-var pcc=document.getElementById('scatter'),mpp=Math.max.apply(null,D.price_quality.map(function(d){return d.price}));
-D.price_quality.forEach(function(d){var x=(d.price/mpp)*90+5,y=95-(d.score/10)*85,e=document.createElement('div');e.className='dot';e.style.cssText='left:'+x+'%;top:'+y+'%;background:'+(TC[d.tier]||'#888');e.title=d.market_id+': $'+d.price+' → '+d.score+'/10';pcc.appendChild(e)});
+var paretoAgents=A.filter(function(a){return a.n_markets>0}).map(function(a){
+  var costPerMarket=a.n_markets>0?a.costs/a.n_markets:0;
+  return{id:a.id,x:costPerMarket,y:a.avg_score,size:a.wins+1,color:TC[a.aesthetic]||'#888',data:a};
+});
+var paretoLine=[];
+paretoAgents.forEach(function(a1){
+  var isDominated=paretoAgents.some(function(a2){return a2.x<=a1.x&&a2.y>=a1.y&&(a2.x<a1.x||a2.y>a1.y)});
+  if(!isDominated)paretoLine.push(a1);
+});
+paretoLine.sort(function(a,b){return a.x-b.x});
+drawScatter(document.getElementById('pareto'),'Cost/Market',paretoLine.length?'Avg Score':'(no data)',paretoAgents);
 
-var ca=D.cost_absorption.sort(function(a,b){return b.ratio-a.ratio}),mrr=Math.max.apply(null,ca.map(function(d){return d.ratio}).concat([1]));
-document.getElementById('absorb').innerHTML=ca.map(function(d){var w=d.ratio/mrr*100;return'<div class="bar"><div class="bl"><span class="tc tc-'+d.tier+'">'+d.tier+'</span> '+d.market_id+'</div><div class="bf" style="width:'+w+'%;background:#f44336"></div><div class="bv">'+d.ratio.toFixed(1)+'x</div></div>'}).join('');
+var scoreWinRatePoints=A.map(function(a){return{x:a.avg_score,y:(a.win_rate*100|0),size:a.n_markets,color:TC[a.economic_strategy]||'#888'};});
+drawScatter(document.getElementById('scatter2'),'Avg Score (1-10)','Win Rate (%)',scoreWinRatePoints);
+
+var revisions=[];D.markets.forEach(function(m){m.submissions.forEach(function(s){if(s.n_revisions>0){revisions.push({x:s.initial_score,y:s.final_score,q:s.qualified,color:s.qualified?'#4caf50':'#f44336'});}})});
+drawScatter(document.getElementById('revplot'),'Initial Score','Final Score',revisions);
 
 var mpl=Math.max.apply(null,A.map(function(a){return Math.abs(a.pnl)}).concat([.01]));
-document.getElementById('pnl').innerHTML=A.map(function(a){var w=Math.abs(a.pnl)/mpl*100,c=a.pnl>=0?'#4caf50':'#f44336';return'<div class="bar"><div class="bl">'+a.id+'</div><div class="bf" style="width:'+w+'%;background:'+c+'"></div><div class="bv">'+(a.pnl>=0?'+':'')+'$'+a.pnl.toFixed(3)+'</div></div>'}).join('');
+document.getElementById('pnl').innerHTML=A.slice(0,5).map(function(a){var w=Math.abs(a.pnl)/mpl*100,c=a.pnl>=0?'#4caf50':'#f44336';return'<div class="bar"><div class="bl">'+a.id.substring(0,20)+'</div><div class="bf" style="width:'+w+'%;background:'+c+'"></div><div class="bv">'+(a.pnl>=0?'+':'')+'$'+a.pnl.toFixed(3)+'</div></div>'}).join('');
 
-document.querySelector('#atbl tbody').innerHTML=A.map(function(a,i){var c=a.pnl>=0?'p':'n';return'<tr><td>'+(i+1)+'</td><td><b>'+a.id+'</b></td><td>'+a.economic_strategy+'</td><td>'+a.wins+'</td><td>'+a.losses+'</td><td>'+(a.win_rate*100).toFixed(0)+'%</td><td>'+a.avg_score.toFixed(1)+'</td><td>'+a.revisions_attempted+'</td><td>$'+a.costs.toFixed(3)+'</td><td class="'+c+'"><b>'+(a.pnl>=0?'+':'')+'$'+a.pnl.toFixed(3)+'</b></td></tr>'}).join('');
+var sparkTBody='';
+A.forEach(function(a,i){
+  var c=a.pnl>=0?'p':'n';
+  var spark='<div class="spark">';
+  var mx=Math.max.apply(null,a.scores.concat([1]));
+  a.scores.forEach(function(s){
+    var h=Math.max(2,s/mx*12);
+    var col=s>=8?'#2e7d32':(s>=6?'#f9a825':'#c62828');
+    spark+='<div class="sb" style="background:'+col+';height:'+h+'px" title="'+s+'"></div>';
+  });
+  spark+='</div>';
+  sparkTBody+='<tr><td>'+(i+1)+'</td><td><b>'+a.id.substring(0,16)+'</b></td><td>'+a.economic_strategy+'</td><td>'+a.wins+'</td><td>'+a.losses+'</td><td>'+(a.win_rate*100|0)+'%</td><td>'+a.avg_score.toFixed(1)+'</td><td>'+spark+'</td><td>$'+a.costs.toFixed(3)+'</td><td class="'+c+'"><b>'+(a.pnl>=0?'+':'')+'$'+a.pnl.toFixed(3)+'</b></td></tr>';
+});
+document.querySelector('#atbl tbody').innerHTML=sparkTBody;
 
-document.getElementById('ttbl').innerHTML='<table><thead><tr><th>Tier</th><th>N</th><th>OK</th><th>Fail</th><th>Avg</th><th>Gap</th><th>Vol</th></tr></thead><tbody>'+TO.filter(function(t){return D.tier_summary[t]&&D.tier_summary[t].total>0}).map(function(t){var s=D.tier_summary[t];return'<tr><td><span class="tc tc-'+t+'">'+t+'</span></td><td>'+s.total+'</td><td>'+s.settled+'</td><td class="'+(s.timeouts?'n':'')+'">'+s.timeouts+'</td><td>'+(s.avg_score?s.avg_score.toFixed(1):'—')+'</td><td class="p">+'+s.quality_gap.toFixed(1)+'</td><td>$'+s.total_volume.toFixed(2)+'</td></tr>'}).join('')+'</tbody></table>';
+document.getElementById('ttbl').innerHTML='<table><thead><tr><th>Tier</th><th>N</th><th>OK</th><th>Fail</th><th>Avg</th><th>Gap</th></tr></thead><tbody>'+TO.filter(function(t){return D.tier_summary[t]&&D.tier_summary[t].total>0}).map(function(t){var s=D.tier_summary[t];return'<tr><td><span class="tc tc-'+t+'">'+t.substring(0,3)+'</span></td><td>'+s.total+'</td><td>'+s.settled+'</td><td class="'+(s.timeouts?'n':'')+'">'+s.timeouts+'</td><td>'+(s.avg_score?s.avg_score.toFixed(1):'—')+'</td><td class="p">+'+s.quality_gap.toFixed(1)+'</td></tr>'}).join('')+'</tbody></table>';
 
-document.getElementById('depth').innerHTML=TO.filter(function(t){return D.tier_summary[t]&&D.tier_summary[t].total>0}).map(function(t){var s=D.tier_summary[t];return'<div style="margin:4px 0"><span style="font-size:.7em;color:'+TC[t]+'">'+t.toUpperCase()+'</span><div class="bar"><div class="bl" style="width:50px">In</div><div class="bf" style="width:'+(s.avg_participants/10*100)+'%;background:#42a5f5;opacity:.5"></div><div class="bv">'+s.avg_participants.toFixed(1)+'</div></div><div class="bar"><div class="bl" style="width:50px">OK</div><div class="bf" style="width:'+(s.avg_qualified/10*100)+'%;background:#4caf50"></div><div class="bv">'+s.avg_qualified.toFixed(1)+'</div></div></div>'}).join('');
+document.getElementById('sdist').innerHTML=TO.filter(function(t){return D.tier_summary[t]&&D.tier_summary[t].total>0}).map(function(t){
+  var all_scores=D.tier_summary[t].all_scores,bk=Array(10).fill(0);
+  all_scores.forEach(function(s){bk[Math.min(Math.max(s,1),10)-1]++});
+  var mx=Math.max.apply(null,bk.concat([1]));
+  return'<div style="flex:1;min-width:80px"><div style="font-size:.65em;color:'+TC[t]+';margin-bottom:2px">'+t+' n='+all_scores.length+'</div><div style="display:flex;align-items:flex-end;height:40px;gap:1px">'+bk.map(function(c,i){var h=c/mx*40,cl=i>=7?'#2e7d32':(i>=5?'#f9a825':'#c62828');return'<div style="flex:1;background:'+cl+';height:'+h+'px;border-radius:1px 1px 0 0" title="'+(i+1)+': '+c+'"></div>'}).join('')+'</div></div>'
+}).join('');
 
-var rv=[];D.markets.forEach(function(m){m.submissions.forEach(function(s){if(s.n_revisions>0)rv.push({a:s.agent_id,m:m.market_id,t:m.tier,i:s.initial_score,f:s.final_score,n:s.n_revisions,q:s.qualified})})});
-document.getElementById('rev').innerHTML=rv.length?rv.map(function(d){var c=d.q?'#4caf50':(d.f>d.i?'#ffeb3b':'#f44336');return'<div class="bar"><div class="bl">'+d.a.substring(0,18)+' '+d.m+'</div><div style="display:flex;gap:6px;align-items:center"><span style="color:#888">'+d.i+'</span><span style="color:#444">→'+d.n+'r→</span><span style="color:'+c+';font-weight:bold">'+d.f+'</span>'+(d.q?' <span class="rb">OK</span>':'')+'</div></div>'}).join(''):'<div style="color:#444">None</div>';
-
-var sd={};D.markets.forEach(function(m){m.submissions.forEach(function(s){if(!sd[m.tier])sd[m.tier]=[];sd[m.tier].push(s.final_score)})});
-document.getElementById('sdist').innerHTML=TO.filter(function(t){return sd[t]}).map(function(t){var sc=sd[t],bk=Array(10).fill(0);sc.forEach(function(s){bk[Math.min(s,10)-1]++});var mx=Math.max.apply(null,bk.concat([1]));return'<div style="flex:1;min-width:100px"><div style="font-size:.7em;color:'+TC[t]+'">'+t+' n='+sc.length+' avg='+(sc.reduce(function(a,b){return a+b},0)/sc.length).toFixed(1)+'</div><div style="display:flex;align-items:flex-end;height:50px;gap:1px">'+bk.map(function(c,i){var h=c/mx*50,cl=i>=7?'#4caf50':(i>=5?'#ffeb3b':'#f44336');return'<div style="flex:1;background:'+cl+';height:'+h+'px;border-radius:1px 1px 0 0" title="'+(i+1)+': '+c+'"></div>'}).join('')+'</div><div style="display:flex;font-size:.5em;color:#444">'+bk.map(function(_,i){return'<div style="flex:1;text-align:center">'+(i+1)+'</div>'}).join('')+'</div></div>'}).join('');
-
-document.getElementById('mlist').innerHTML=D.markets.map(function(m){
-var st='';
-if(m.status==='settled'){var rs=m.submissions.filter(function(s){return s.n_revisions>0}),rn=rs.length?' <span class="rb">'+rs.reduce(function(s,r){return s+r.n_revisions},0)+'rev</span>':'';st='<span class="wb">★'+m.winner+'</span> '+m.score+'/10 '+m.elapsed.toFixed(0)+'s'+rn}else st='<span style="color:#f44336">TIMEOUT</span>';
-var sc=(m.submissions||[]).sort(function(a,b){return b.final_score-a.final_score}).slice(0,6).map(function(s){var c=s.final_score>=8?'sh':(s.final_score>=6?'sm':'sl');return'<span class="sc '+c+'">'+s.agent_id.substring(0,12)+' '+s.final_score+(s.n_revisions?' r'+s.n_revisions:'')+'</span>'}).join('');
-return'<div class="mc"><div style="display:flex;justify-content:space-between"><span><span class="tc tc-'+m.tier+'">'+m.tier+'</span> <b>'+m.market_id+'</b></span><span style="color:#555">$'+m.max_price.toFixed(3)+' q≥'+m.min_quality+'</span></div><div class="pr">'+m.prompt+'</div><div style="margin-top:3px">'+st+'</div><div class="sr">'+sc+'</div></div>'}).join('');
+document.getElementById('mlist').innerHTML=S.concat(T).map(function(m){
+  var st='';
+  if(m.status==='settled'){var rs=m.submissions.filter(function(s){return s.n_revisions>0}),rn=rs.length?' <span class="rb">'+rs.reduce(function(s,r){return s+r.n_revisions},0)+'rev</span>':'';st='<span class="wb">★'+m.winner+'</span> '+m.score+'/10 '+m.elapsed.toFixed(0)+'s'+rn;}else st='<span style="color:#f44336">TIMEOUT</span>';
+  var sc=(m.submissions||[]).sort(function(a,b){return b.final_score-a.final_score}).slice(0,6).map(function(s){var c=s.final_score>=8?'sh':(s.final_score>=6?'sm':'sl');return'<span class="sc '+c+'">'+s.agent_id.substring(0,12)+' '+s.final_score+(s.n_revisions?' r'+s.n_revisions:'')+'</span>'}).join('');
+  return'<div class="mc"><div style="display:flex;justify-content:space-between"><span><span class="tc tc-'+m.tier+'">'+m.tier+'</span> <b>'+m.market_id+'</b></span><span style="color:#555">$'+m.max_price.toFixed(3)+' q≥'+m.min_quality+'</span></div><div class="pr">'+m.prompt+'</div><div style="margin-top:3px">'+st+'</div><div class="sr">'+sc+'</div></div>'
+}).join('');
 </script>
 </body></html>"""
 
