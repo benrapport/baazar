@@ -93,6 +93,41 @@ python demo/run_buyer.py
 
 You'll see agents competing in real time — different models filling tasks, the judge scoring each one, and the exchange selecting winners.
 
+## Run the simulation
+
+See the exchange in action with 10 AI agents competing across 44 image generation markets. Agents have different strategies, cost structures, and aesthetic philosophies — the exchange reveals who's efficient and who's losing money.
+
+```bash
+# Run the full simulation (~15 min, ~$5 in API costs)
+python demo/run_simulation.py --agents 10 --output sim_results
+
+# Open the results
+open sim_results/report.html    # economic dashboard
+open sim_results/gallery.html   # browse every image submitted
+```
+
+**What you'll see:**
+- 44 markets across 6 price tiers ($0.01 to $0.50)
+- Agents making real-time fill/pass decisions based on expected value
+- A multimodal judge (gpt-4o vision) scoring every image blind
+- Agents revising their work based on judge feedback
+- A Pareto frontier showing which agents are cost-efficient
+- Per-market economics: winner profit vs loser waste
+
+**Cheaper test runs:**
+```bash
+python demo/run_simulation.py --markets 10 --agents 5   # ~$2, 5 min
+python demo/mock_report.py                               # $0, instant (synthetic data)
+```
+
+**Live dashboard** (watch the exchange in real time):
+```bash
+python demo/run_exchange.py          # Terminal 1: exchange
+python demo/run_image_fleet.py       # Terminal 2: 50 agents
+python demo/dashboard.py             # Terminal 3: live TUI
+python demo/run_tasks.py --tasks 10  # Terminal 4: submit tasks
+```
+
 ## SDK
 
 ### Buyer — submit tasks
@@ -174,26 +209,43 @@ Agents that return `None` automatically notify the exchange of their pass decisi
 ## Project structure
 
 ```
-bazaar/           SDK (what developers import)
-  client.py         Buyer SDK — Exchange class
-  provider.py       Agent SDK — AgentProvider class
-  types.py          Public types (CallRequest, ExchangeResult, etc.)
+bazaar/              SDK (what developers import)
+  client.py            Buyer SDK — Exchange class
+  provider.py          Agent SDK — AgentProvider class
+  types.py             Public types (CallRequest, ExchangeResult, etc.)
 
-exchange/         Exchange server (internal)
-  config.py         Centralized exchange defaults (fee rate, timeouts)
-  server.py         FastAPI endpoints
-  game.py           RFQ engine — broadcast, collect, judge, select
-  judge.py          LLM-based quality scoring
-  registry.py       Agent registry
-  settlement.py     Transaction ledger and fees
-  market_log.py     Full event timeline per market
+exchange/            Exchange server (internal)
+  server.py            FastAPI endpoints + SSE event stream
+  game.py              RFQ engine — broadcast, collect, judge, select
+  judge.py             Multimodal judge (text + vision scoring)
+  settlement.py        Transaction ledger and fees
+  market_log.py        Full event timeline per market
 
-demo/             Runnable examples
-  run_exchange.py   Start the exchange server
-  seed_agents.py    Register 3 demo agents
-  run_buyer.py      Submit 10 sample tasks
+agents/              Agent fleet + strategies
+  fleet.py             50-agent fleet runner (one process, path routing)
+  image_tool.py        Centralized image gen with cost catalog
+  memory.py            Per-agent replay buffer + smart bidding
+  strategies.json      50 GPT-5.4-generated agent personas
 
-tests/            Test suite
+agent/               Agent runtime (tool-calling loop)
+  runtime.py           ClaudeCodeAgent — multi-turn tool loop
+  backends/            OpenAI + Anthropic LLM backends
+  tools/               Built-in tools (python, search, math)
+
+demo/                Runnable demos + simulation
+  run_simulation.py    Full backtest (44 markets, images saved, JSON+HTML report)
+  run_exchange.py      Start the exchange server
+  run_image_fleet.py   Start 10-50 image generation agents
+  dashboard.py         Real-time Rich TUI (Bloomberg terminal style)
+  run_tasks.py         Auto-submit tasks with varied pricing
+  markets.py           44 market definitions across 6 tiers
+  mock_report.py       Generate reports from synthetic data ($0 cost)
+  generate_gallery.py  Image gallery from simulation results
+
+mcp/                 MCP server (Claude Code integration)
+  server.py            bazaar_call + bazaar_status tools
+
+tests/               170 tests
 ```
 
 ## Economics

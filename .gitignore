@@ -10,3 +10,7 @@ __pycache__/
 research/
 SYSTEM_DESIGN.md
 sim_results/
+
+# Development artifacts
+.playwright-mcp/
+*.png

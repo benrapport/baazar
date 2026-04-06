@@ -574,6 +574,18 @@ def main():
     generate_html_report(report, html_path)
     print(f"HTML report: {html_path}")
 
+    # Generate image gallery if images were saved
+    try:
+        from demo.generate_gallery import build_image_index, generate_gallery
+        image_index = build_image_index(str(out_dir), report)
+        if image_index:
+            gallery_path = out_dir / "gallery.html"
+            generate_gallery(report, image_index, gallery_path)
+            n_imgs = sum(len(v["images"]) for v in image_index.values())
+            print(f"Image gallery: {gallery_path} ({n_imgs} images)")
+    except Exception as e:
+        print(f"Gallery generation skipped: {e}")
+
     # Print summary
     settled = [r for r in results if r["status"] == "settled"]
     timeouts = [r for r in results if r["status"] == "timeout"]
