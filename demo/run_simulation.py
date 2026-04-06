@@ -358,7 +358,13 @@ def main():
 
 
 def generate_html_report(report: dict, path: Path):
-    """Generate a self-contained HTML dashboard from simulation data."""
+    """Generate HTML dashboard — delegates to the improved mock_report template."""
+    from demo.mock_report import generate_html
+    generate_html(report, path)
+
+
+def _generate_html_report_old(report: dict, path: Path):
+    """Old report generator — kept for reference only."""
 
     html = f"""<!DOCTYPE html>
 <html lang="en">
