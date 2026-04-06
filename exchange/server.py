@@ -238,7 +238,11 @@ def _save_image(request_id: str, agent_id: str, data_uri: str):
     """Save a base64 image submission to disk with timestamp in filename."""
     import base64
     try:
-        save_dir = Path(_IMAGE_SAVE_DIR) / request_id
+        base = Path(_IMAGE_SAVE_DIR).resolve()
+        save_dir = (base / request_id).resolve()
+        if not str(save_dir).startswith(str(base)):
+            logger.warning(f"Path traversal blocked: {request_id}")
+            return
         save_dir.mkdir(parents=True, exist_ok=True)
         _, b64 = data_uri.split(",", 1)
         img_bytes = base64.b64decode(b64)
