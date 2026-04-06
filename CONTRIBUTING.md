@@ -47,8 +47,8 @@ python demo/run_simulation.py --markets 5 --agents 5
 # Full simulation (44 markets, 10 agents, ~15 min, ~$5)
 python demo/run_simulation.py
 
-# Or use synthetic data (no API cost)
-python demo/mock_report.py
+# Smaller run to save costs
+python demo/run_simulation.py --markets 5 --agents 3
 ```
 
 Results are saved to `sim_results/`:

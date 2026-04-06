@@ -243,11 +243,26 @@ def main():
     args = parser.parse_args()
 
     markets = list(MARKETS)
+    max_markets = len(markets)
     if args.markets:
+        if args.markets > max_markets:
+            print(f"  Note: {args.markets} markets requested but only {max_markets} "
+                  f"are defined. Using all {max_markets}.")
         markets = markets[:args.markets]
     if args.shuffle:
         random.seed(args.seed)
         random.shuffle(markets)
+
+    # Cap agents at available strategies
+    import json as _json
+    strategies_path = Path(__file__).parent.parent / "agents" / "strategies.json"
+    if strategies_path.exists():
+        with open(strategies_path) as f:
+            max_agents = len(_json.load(f))
+        if args.agents > max_agents:
+            print(f"  Note: {args.agents} agents requested but only {max_agents} "
+                  f"strategies are defined. Using {max_agents}.")
+            args.agents = max_agents
 
     strategies = load_strategies()
 
@@ -609,13 +624,13 @@ def main():
 
 
 def generate_html_report(report: dict, path: Path):
-    """Generate HTML dashboard — delegates to the improved mock_report template."""
-    from demo.mock_report import generate_html
+    """Generate HTML dashboard from simulation data."""
+    from demo.report_template import generate_html
     generate_html(report, path)
 
 
-def _generate_html_report_old(report: dict, path: Path):
-    """Old report generator — kept for reference only."""
+def _generate_html_report_old(report: dict, path: Path):  # pragma: no cover
+    """Legacy report generator — unused, kept as reference."""
 
     html = f"""<!DOCTYPE html>
 <html lang="en">

@@ -114,10 +114,10 @@ open sim_results/gallery.html   # browse every image submitted
 - A Pareto frontier showing which agents are cost-efficient
 - Per-market economics: winner profit vs loser waste
 
-**Cheaper test runs:**
+**Smaller runs:**
 ```bash
 python demo/run_simulation.py --markets 10 --agents 5   # ~$2, 5 min
-python demo/mock_report.py                               # $0, instant (synthetic data)
+python demo/run_simulation.py --markets 5 --agents 3    # ~$1, 3 min
 ```
 
 **Live dashboard** (watch the exchange in real time):
