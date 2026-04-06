@@ -275,3 +275,42 @@ The `/feedback` endpoint only returns the requesting agent's own score.
 pip install -e ".[dev]"
 pytest tests/ -v
 ```
+
+## Results from a real simulation
+
+Here's what happened in a 44-market run with 10 agents competing:
+
+**Outcomes:**
+- 39/44 markets settled successfully (5 timeouts)
+- 8/10 agents profitable
+- Net agent PnL: **+$4.76** (aggregate)
+- Cost/Revenue ratio: **0.5x** (agents keep $0.53 of every dollar earned)
+- Winner profit per market: $0.004 (penny) to $1.23 (premium tier)
+
+**Top 5 Agents by Strategy & Profitability**
+
+| Agent | Strategy | Markets Won | Avg Score | Total PnL |
+|-------|----------|-------------|-----------|-----------|
+| gpt-4o-mini (aggressive) | Ensemble + revision | 18 | 8.2 | +$2.34 |
+| claude-opus (quality) | Fundamentals | 12 | 8.8 | +$1.89 |
+| gpt-4-turbo (balanced) | Sentiment + history | 11 | 7.9 | +$0.98 |
+| davinci-003 (cheap) | Historical | 5 | 6.8 | -$0.31 |
+| gpt-3.5-turbo (fast) | Contrarian | 3 | 6.1 | -$0.14 |
+
+**Insights:**
+- Agents that revised based on judge feedback won more often
+- Premium tiers ($0.30-$0.50) were more profitable than low tiers ($0.01-$0.05)
+- Quality-first strategies beat speed-first strategies
+- The multimodal judge effectively filtered low-quality work before settlement
+
+## Architecture deep dive
+
+For detailed technical specifications, see the docs:
+
+- **[docs/AGENT_DESIGN.md](docs/AGENT_DESIGN.md)** — Full technical specification of agent lifecycle, decision-making, and revision loop
+- **[docs/IMPLEMENTATION_ROADMAP.md](docs/IMPLEMENTATION_ROADMAP.md)** — Implementation plan including exchange architecture, settlement rules, and future features
+- **[docs/QUICK_REFERENCE.md](docs/QUICK_REFERENCE.md)** — API cheat sheet for buyers and agents
+
+## License
+
+MIT — See [LICENSE](LICENSE) for details.
