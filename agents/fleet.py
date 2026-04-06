@@ -106,6 +106,7 @@ class ImageFleet:
         user_prompt = payload.input
         request_id = payload.request_id
         min_quality = payload.min_quality
+        top_n = payload.top_n  # how many winners — more slots = better odds
         memory = self._memories[agent_id]
 
         # Pick model config based on economic strategy
@@ -127,7 +128,7 @@ class ImageFleet:
         # Smart bidding: should we even compete?
         n_agents = len(self.strategies)
         should_fill, reason = memory.should_bid(
-            max_price, min_quality, cost_per_attempt, n_agents
+            max_price, min_quality, cost_per_attempt, n_agents, top_n
         )
         if not should_fill:
             logger.info(f"[{agent_id}] PASS — {reason}")

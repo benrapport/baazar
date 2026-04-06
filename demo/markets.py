@@ -152,7 +152,7 @@ MARKETS = [
                   "Chiaroscuro lighting from a single source",
                   "Oil painting technique with visible brushwork"]},
 
-    {"id": "M02", "max_price": 0.12, "min_quality": 8, "tier": "mid",
+    {"id": "M02", "top_n": 2, "max_price": 0.12, "min_quality": 8, "tier": "mid",
      "prompt": "A Japanese garden in peak autumn — vermillion bridge arching "
                "over a koi pond with visible fish, maple trees with leaves "
                "mid-fall, a stone lantern covered in moss, morning mist "
@@ -174,7 +174,7 @@ MARKETS = [
                   "Cloud lighting is consistent with sun position",
                   "Overall design is mechanically plausible"]},
 
-    {"id": "M04", "max_price": 0.15, "min_quality": 8, "tier": "mid",
+    {"id": "M04", "top_n": 2, "max_price": 0.15, "min_quality": 8, "tier": "mid",
      "prompt": "An antiquarian bookshop at closing time — floor-to-ceiling "
                "mahogany shelves, a green banker's lamp on a cluttered desk, "
                "rain streaking the window, a marmalade cat asleep on an open "
@@ -196,7 +196,7 @@ MARKETS = [
                   "Snow texture on rocks is realistic",
                   "Sense of height and scale from cliff to forest"]},
 
-    {"id": "M06", "max_price": 0.12, "min_quality": 8, "tier": "mid",
+    {"id": "M06", "top_n": 2, "max_price": 0.12, "min_quality": 8, "tier": "mid",
      "prompt": "A bustling medieval European market square at first light — "
                "half-timbered buildings, merchant stalls with hanging meats "
                "and bread, cobblestone square wet from overnight rain, "
@@ -219,7 +219,7 @@ MARKETS = [
                   "Bootprints in dust are realistic",
                   "Spacecraft in background provides scale"]},
 
-    {"id": "M08", "max_price": 0.14, "min_quality": 8, "tier": "mid",
+    {"id": "M08", "top_n": 2, "max_price": 0.14, "min_quality": 8, "tier": "mid",
      "prompt": "A European dragon curled around its treasure hoard in a "
                "vast underground cavern — individual gold coins, jeweled "
                "chalices, one open eye watching the viewer, scales "
@@ -235,7 +235,7 @@ MARKETS = [
     # PREMIUM MARKETS ($0.20-0.50, quality 9)
     # Near-perfection required. Detailed, specific, unforgiving criteria.
     # ══════════════════════════════════════════════════════════════════
-    {"id": "X01", "max_price": 0.30, "min_quality": 9, "tier": "premium",
+    {"id": "X01", "top_n": 3, "max_price": 0.30, "min_quality": 9, "tier": "premium",
      "prompt": "Photorealistic portrait: an elderly Icelandic fisherman on "
                "his weathered wooden boat at dawn — deep wrinkles mapping "
                "decades of North Atlantic wind, salt-and-pepper beard with "
@@ -264,7 +264,7 @@ MARKETS = [
                   "Butterfly wing pattern correct for species",
                   "Vanitas symbolism present: decay, time, mortality"]},
 
-    {"id": "X03", "max_price": 0.40, "min_quality": 9, "tier": "premium",
+    {"id": "X03", "top_n": 3, "max_price": 0.40, "min_quality": 9, "tier": "premium",
      "prompt": "Cinematic widescreen establishing shot: a fantasy city built "
                "into and around a 500-meter waterfall — stone bridges span "
                "between carved cliff towers, thousands of glowing windows "
@@ -293,7 +293,7 @@ MARKETS = [
                   "Spider is small but anatomically correct",
                   "Overall achievable with real macro photography"]},
 
-    {"id": "X05", "max_price": 0.50, "min_quality": 9, "tier": "premium",
+    {"id": "X05", "top_n": 3, "max_price": 0.50, "min_quality": 9, "tier": "premium",
      "prompt": "Architectural visualization: Zaha Hadid-inspired museum at "
                "night — flowing parametric white concrete facade with "
                "integrated LED strip lighting, floor-to-ceiling glass "
@@ -341,7 +341,7 @@ MARKETS = [
     # CREATIVE MARKETS ($0.10-0.25, quality 8)
     # Abstract concepts. High bar for interpretation quality.
     # ══════════════════════════════════════════════════════════════════
-    {"id": "C01", "max_price": 0.15, "min_quality": 8, "tier": "creative",
+    {"id": "C01", "top_n": 2, "max_price": 0.15, "min_quality": 8, "tier": "creative",
      "prompt": "Visualize the feeling of nostalgia — not a literal scene "
                "from the past, but the emotional texture of remembering: "
                "warmth, loss, golden light, the soft edges of a memory "
@@ -360,7 +360,7 @@ MARKETS = [
                   "Viewer feels they could hear their own heartbeat",
                   "Technical quality is high — not just a blurry forest"]},
 
-    {"id": "C03", "max_price": 0.20, "min_quality": 8, "tier": "creative",
+    {"id": "C03", "top_n": 2, "max_price": 0.20, "min_quality": 8, "tier": "creative",
      "prompt": "The last page of a story nobody will ever finish — "
                "visualize the moment a narrative dissolves into nothing, "
                "characters mid-gesture, a world half-rendered, the edge "
@@ -399,7 +399,7 @@ MARKETS = [
                   "Jazz specifically — not generic music",
                   "No musical instruments depicted literally"]},
 
-    {"id": "C07", "max_price": 0.20, "min_quality": 8, "tier": "creative",
+    {"id": "C07", "top_n": 2, "max_price": 0.20, "min_quality": 8, "tier": "creative",
      "prompt": "The weight of an unspoken apology — the physical mass of "
                "words you should have said but didn't, carried in your "
                "chest for years, visualized as a tangible burden",
@@ -423,7 +423,7 @@ MARKETS = [
     # STRESS MARKETS ($0.06-0.08, quality 8)
     # Tight margins, high bar. The hardest economic zone.
     # ══════════════════════════════════════════════════════════════════
-    {"id": "S01", "max_price": 0.06, "min_quality": 8, "tier": "stress",
+    {"id": "S01", "top_n": 2, "max_price": 0.06, "min_quality": 8, "tier": "stress",
      "prompt": "A weathered pirate galleon sailing through a violent storm "
                "at sunset — lightning illuminating the sails, crew scrambling "
                "on deck, enormous waves, the sky split between storm and "
@@ -462,7 +462,7 @@ MARKETS = [
                   "Lavender rows recede into proper perspective",
                   "Farmhouse and cypress create Provençal atmosphere"]},
 
-    {"id": "S05", "max_price": 0.08, "min_quality": 8, "tier": "stress",
+    {"id": "S05", "top_n": 2, "max_price": 0.08, "min_quality": 8, "tier": "stress",
      "prompt": "A wizard's tower perched on a floating island of earth and "
                "rock — roots dangling from the bottom, a waterfall pouring "
                "off one edge into clouds below, a narrow stone bridge "

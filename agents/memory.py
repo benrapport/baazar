@@ -109,9 +109,11 @@ class AgentMemory:
         return won / len(relevant)
 
     def should_bid(self, max_price: float, min_quality: int,
-                   cost_per_attempt: float, n_competitors: int = 10) -> tuple[bool, str]:
+                   cost_per_attempt: float, n_competitors: int = 10,
+                   top_n: int = 1) -> tuple[bool, str]:
         """Decide whether to bid on a market based on expected value.
 
+        top_n > 1 means multiple winners get paid — increases win probability.
         Returns (should_fill, reason).
         """
         scored = self.scored_attempts
@@ -123,20 +125,24 @@ class AgentMemory:
 
         # With no history, be willing to explore (but require positive margin)
         if len(scored) < 3:
-            if margin > cost_per_attempt * 0.3:  # need at least 30% margin
-                return True, "exploring (insufficient history)"
+            if margin > cost_per_attempt * 0.3:
+                return True, f"exploring (top_n={top_n})"
             return False, f"thin margin for exploration (${margin:.4f})"
 
         # Estimate qualification probability
         qual_rate = self.estimate_qualification_rate(min_quality)
 
-        # Estimate win probability (given we qualify)
-        # With N competitors, assume uniform chance among qualifiers
-        # But adjust based on our historical win rate
+        # Estimate win probability
+        # top_n > 1 multiplies the naive win chance — more winner slots
         historical_win_rate = self.get_win_rate() or 0.1
-        # Blend: 60% historical, 40% naive (1/competitors)
-        naive_win_rate = qual_rate / max(n_competitors * 0.5, 1)
+        naive_win_rate = qual_rate * min(top_n, n_competitors) / max(n_competitors * 0.5, 1)
+        naive_win_rate = min(naive_win_rate, 0.9)  # cap at 90%
         est_win_prob = 0.6 * historical_win_rate + 0.4 * naive_win_rate
+
+        # Boost win probability for top_n > 1 based on qualification rate
+        if top_n > 1:
+            # If I qualify, my odds are roughly top_n/qualified_agents
+            est_win_prob = min(est_win_prob * (1 + (top_n - 1) * 0.3), 0.9)
 
         # Expected value = P(win) * revenue - cost
         expected_revenue = est_win_prob * max_price
@@ -145,15 +151,16 @@ class AgentMemory:
         if expected_value <= 0:
             return False, (f"negative EV (${expected_value:.4f}): "
                           f"P(qual)={qual_rate:.0%} P(win)={est_win_prob:.0%} "
-                          f"rev=${expected_revenue:.4f} cost=${cost_per_attempt:.4f}")
+                          f"top_n={top_n}")
 
-        # Also check: can I even meet the quality bar?
-        if qual_rate < 0.2 and len(scored) >= 5:
+        # Can I meet the quality bar?
+        if qual_rate < 0.15 and len(scored) >= 5:
             return False, (f"low qualification rate ({qual_rate:.0%}) "
                           f"for q>={min_quality}")
 
         return True, (f"EV=${expected_value:.4f}: "
-                     f"P(qual)={qual_rate:.0%} P(win)={est_win_prob:.0%}")
+                     f"P(qual)={qual_rate:.0%} P(win)={est_win_prob:.0%} "
+                     f"top_n={top_n}")
 
     def build_context(self) -> str:
         """Build few-shot context string for prompt rewriting.

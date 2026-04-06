@@ -114,11 +114,13 @@ def run_market(ex: Exchange, market: dict, timeout: float) -> dict:
     }
 
     try:
+        top_n = market.get("top_n", 1)
         result = ex.call(
             llm={"input": market["prompt"]},
             exchange={
                 "max_price": market["max_price"],
                 "timeout": timeout,
+                "top_n": top_n,
                 "judge": {
                     "min_quality": market["min_quality"],
                     "criteria": market["criteria"],
@@ -126,11 +128,25 @@ def run_market(ex: Exchange, market: dict, timeout: float) -> dict:
             },
         )
         record["elapsed"] = time.time() - record["start_time"]
-        record["winner"] = result.agent_id
-        record["score"] = result.score
-        record["price"] = result.price
-        record["latency_ms"] = result.latency_ms
-        record["request_id"] = result.request_id
+        record["top_n"] = top_n
+        # Handle single or multi-winner results
+        if isinstance(result, list):
+            record["winners"] = [{"agent_id": r.agent_id, "score": r.score,
+                                   "price": r.price, "latency_ms": r.latency_ms}
+                                  for r in result]
+            record["winner"] = result[0].agent_id
+            record["score"] = result[0].score
+            record["price"] = sum(r.price for r in result)
+            record["latency_ms"] = result[0].latency_ms
+            record["request_id"] = result[0].request_id
+        else:
+            record["winners"] = [{"agent_id": result.agent_id, "score": result.score,
+                                   "price": result.price, "latency_ms": result.latency_ms}]
+            record["winner"] = result.agent_id
+            record["score"] = result.score
+            record["price"] = result.price
+            record["latency_ms"] = result.latency_ms
+            record["request_id"] = result.request_id
         record["status"] = "settled"
     except TimeoutError:
         record["elapsed"] = time.time() - record["start_time"]
@@ -383,15 +399,17 @@ def main():
         agent_pnl[s_id]["aesthetic"] = s.get("aesthetic", "")
         agent_pnl[s_id]["economic_strategy"] = s.get("economic_strategy", "")
 
-    # Process results
+    # Process results — credit all winners in top_n markets
     for r in results:
         if r["status"] != "settled":
             continue
-        winner = r["winner"]
-        price = r["price"]
-        agent_pnl[winner]["wins"] += 1
-        agent_pnl[winner]["revenue"] += price
-        agent_pnl[winner]["tiers_won"].add(r["tier"])
+        winner_ids = set()
+        for w in r.get("winners", []):
+            aid = w["agent_id"]
+            winner_ids.add(aid)
+            agent_pnl[aid]["wins"] += 1
+            agent_pnl[aid]["revenue"] += w["price"]
+            agent_pnl[aid]["tiers_won"].add(r["tier"])
 
     # Process detailed scores (all agents that were scored, not just winners)
     for rid, detail in market_details.items():
@@ -409,22 +427,47 @@ def main():
     total_agent_revenue = sum(pnl["revenue"] for pnl in agent_pnl.values())
     exchange_fees = total_buyer_spend * 0.015
 
-    # Price-quality and cost absorption data
+    # Price-quality, cost absorption, and per-market economics
     price_quality = []
     cost_absorption = []
+    market_economics = []  # per-market winner profit vs loser costs
     for r in results:
         if r["status"] == "settled":
             price_quality.append({
                 "price": r["max_price"], "score": r["score"],
                 "tier": r["tier"], "market_id": r["market_id"],
+                "top_n": r.get("top_n", 1),
             })
-            agent_spend = sum(s["cost"] for s in r.get("submissions", []))
+            subs = r.get("submissions", [])
+            agent_spend = sum(s["cost"] for s in subs)
             if agent_spend > 0:
                 cost_absorption.append({
                     "market_id": r["market_id"], "tier": r["tier"],
                     "buyer_paid": r["price"], "agents_spent": agent_spend,
                     "ratio": agent_spend / r["price"] if r["price"] > 0 else 0,
                 })
+
+            # Per-market: who won how much, who lost how much
+            winner_ids = {w["agent_id"] for w in r.get("winners", [])}
+            winner_revenue = sum(w["price"] for w in r.get("winners", []))
+            winner_costs = sum(s["cost"] for s in subs if s["agent_id"] in winner_ids)
+            loser_costs = sum(s["cost"] for s in subs if s["agent_id"] not in winner_ids)
+            market_economics.append({
+                "market_id": r["market_id"],
+                "tier": r["tier"],
+                "top_n": r.get("top_n", 1),
+                "max_price": r["max_price"],
+                "n_participants": r.get("n_participants", 0),
+                "n_qualified": r.get("n_qualified", 0),
+                "n_passed": r.get("n_passed", 0),
+                "n_winners": len(winner_ids),
+                "winner_revenue": winner_revenue,
+                "winner_costs": winner_costs,
+                "winner_profit": winner_revenue - winner_costs,
+                "loser_costs": loser_costs,
+                "total_waste": loser_costs,  # money spent by agents who didn't win
+                "buyer_paid": r["price"],
+            })
 
     # Serialize
     report = {
@@ -472,6 +515,7 @@ def main():
         "tier_summary": {},
         "price_quality": price_quality,
         "cost_absorption": cost_absorption,
+        "market_economics": market_economics,
     }
 
     # Compute quality gaps
