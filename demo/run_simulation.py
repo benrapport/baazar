@@ -130,6 +130,7 @@ def run_market(ex: Exchange, market: dict, timeout: float) -> dict:
         record["score"] = result.score
         record["price"] = result.price
         record["latency_ms"] = result.latency_ms
+        record["request_id"] = result.request_id
         record["status"] = "settled"
     except TimeoutError:
         record["elapsed"] = time.time() - record["start_time"]
@@ -143,26 +144,66 @@ def run_market(ex: Exchange, market: dict, timeout: float) -> dict:
 
 
 def fetch_market_details(request_ids: list[str]) -> dict:
-    """Fetch full market logs from the exchange for all scored agents."""
+    """Fetch full market logs with complete event timelines."""
     details = {}
     markets = httpx.get("http://localhost:8000/markets", timeout=10.0).json()
     for m in markets:
         rid = m["request_id"]
         try:
             mlog = httpx.get(f"http://localhost:8000/markets/{rid}", timeout=10.0).json()
+            opened_at = mlog.get("opened_at", 0)
+            closed_at = mlog.get("closed_at", 0)
+
+            # Build per-agent timeline from events
             scored = {}
+            submissions = {}  # agent_id → list of submission timestamps
+            agent_decisions = {}  # agent_id → {decision, timestamp}
+
             for ev in mlog.get("events", []):
-                if ev["type"] == "judge_completed":
-                    d = ev.get("data", {})
-                    scored[d.get("agent_id", "")] = {
+                etype = ev["type"]
+                ts = ev.get("timestamp", 0)
+                d = ev.get("data", {})
+                aid = d.get("agent_id", "")
+
+                if etype == "submission_received":
+                    if aid not in submissions:
+                        submissions[aid] = []
+                    submissions[aid].append({
+                        "timestamp": ts,
+                        "offset_ms": (ts - opened_at) * 1000,
+                        "revision": d.get("revision", 0),
+                    })
+
+                elif etype == "judge_completed":
+                    scored[aid] = {
                         "score": d.get("score", 0),
                         "feedback": d.get("feedback", ""),
+                        "timestamp": ts,
+                        "offset_ms": (ts - opened_at) * 1000,
                     }
+
+                elif etype == "agent_decision":
+                    agent_decisions[aid] = {
+                        "decision": d.get("decision", ""),
+                        "reason": d.get("reason", ""),
+                        "timestamp": ts,
+                        "offset_ms": (ts - opened_at) * 1000,
+                    }
+
+                elif etype == "winner_selected":
+                    pass  # captured at market level
+
             details[rid] = {
                 "input": mlog.get("input", ""),
                 "agents_invited": mlog.get("agents_invited", []),
                 "winner": mlog.get("winner"),
+                "opened_at": opened_at,
+                "closed_at": closed_at,
+                "duration_ms": (closed_at - opened_at) * 1000 if closed_at else 0,
                 "scored": scored,
+                "submissions": submissions,
+                "decisions": agent_decisions,
+                "events": mlog.get("events", []),  # preserve full timeline
             }
         except Exception:
             pass
@@ -253,16 +294,46 @@ def main():
     # Enrich each market result with per-agent submissions from the logs
     for r in results:
         prompt_prefix = r["prompt"][:30]
-        # Match market log by prompt prefix (request_id isn't stored in results)
         matched_detail = None
+        matched_rid = None
         for rid, detail in market_details.items():
             if detail.get("input", "").startswith(prompt_prefix):
                 matched_detail = detail
+                matched_rid = rid
                 break
+
         if matched_detail:
+            opened_at = matched_detail.get("opened_at", r["start_time"])
+            r["request_id_resolved"] = matched_rid
+            r["opened_at"] = opened_at
+            r["closed_at"] = matched_detail.get("closed_at", 0)
+            r["duration_ms"] = matched_detail.get("duration_ms", 0)
+
+            # Build submissions with full timestamps
             submissions = []
+            sub_times = matched_detail.get("submissions", {})
+            decisions = matched_detail.get("decisions", {})
+
             for aid, score_data in matched_detail.get("scored", {}).items():
                 cost = estimate_agent_cost(aid, strategies, r["max_price"])
+
+                # Get submission timestamps for this agent
+                agent_subs = sub_times.get(aid, [])
+                n_revisions = max(0, len(agent_subs) - 1)
+                first_sub_offset = agent_subs[0]["offset_ms"] if agent_subs else 0
+                last_sub_offset = agent_subs[-1]["offset_ms"] if agent_subs else 0
+                first_sub_ts = agent_subs[0]["timestamp"] if agent_subs else 0
+
+                # Get decision timestamp
+                decision = decisions.get(aid, {})
+                decision_offset = decision.get("offset_ms", 0)
+                decision_type = decision.get("decision", "")
+                decision_reason = decision.get("reason", "")
+
+                # Get score timestamp
+                score_offset = score_data.get("offset_ms", 0)
+                score_ts = score_data.get("timestamp", 0)
+
                 submissions.append({
                     "agent_id": aid,
                     "initial_score": score_data["score"],
@@ -270,17 +341,35 @@ def main():
                     "score": score_data["score"],
                     "feedback": score_data.get("feedback", ""),
                     "cost": cost,
-                    "n_revisions": 0,  # TODO: extract from market log events
+                    "n_revisions": n_revisions,
                     "qualified": score_data["score"] >= r["min_quality"],
-                    "latency_ms": r.get("latency_ms", 0) if aid == r.get("winner") else 0,
+                    # Timestamps
+                    "submit_offset_ms": first_sub_offset,
+                    "score_offset_ms": score_offset,
+                    "submit_timestamp": first_sub_ts,
+                    "score_timestamp": score_ts,
+                    "latency_ms": first_sub_offset,
+                    # Decision info
+                    "decision": decision_type,
+                    "decision_reason": decision_reason,
+                    "decision_offset_ms": decision_offset,
                 })
+
+            # Sort by submission time
+            submissions.sort(key=lambda s: s["submit_offset_ms"])
             r["submissions"] = submissions
             r["n_participants"] = len(submissions)
             r["n_qualified"] = sum(1 for s in submissions if s["qualified"])
+
+            # Count agents that passed (decided not to fill)
+            n_passed = sum(1 for d in decisions.values()
+                          if d.get("decision") == "pass")
+            r["n_passed"] = n_passed
         else:
             r["submissions"] = []
             r["n_participants"] = 0
             r["n_qualified"] = 0
+            r["n_passed"] = 0
 
     # Build agent PnL
     agent_pnl = defaultdict(lambda: {
@@ -359,7 +448,7 @@ def main():
         },
         "markets": results,
         "market_details": {
-            rid: {**d, "scored": d["scored"]}
+            rid: {k: v for k, v in d.items() if k != "events"}
             for rid, d in market_details.items()
         },
         "agent_pnl": {
