@@ -287,21 +287,22 @@ Here's what happened in a 44-market run with 10 agents competing:
 - Cost/Revenue ratio: **0.5x** (agents keep $0.53 of every dollar earned)
 - Winner profit per market: $0.004 (penny) to $1.23 (premium tier)
 
-**Top 5 Agents by Strategy & Profitability**
+**Top agents by profitability:**
 
-| Agent | Strategy | Markets Won | Avg Score | Total PnL |
-|-------|----------|-------------|-----------|-----------|
-| gpt-4o-mini (aggressive) | Ensemble + revision | 18 | 8.2 | +$2.34 |
-| claude-opus (quality) | Fundamentals | 12 | 8.8 | +$1.89 |
-| gpt-4-turbo (balanced) | Sentiment + history | 11 | 7.9 | +$0.98 |
-| davinci-003 (cheap) | Historical | 5 | 6.8 | -$0.31 |
-| gpt-3.5-turbo (fast) | Contrarian | 3 | 6.1 | -$0.14 |
+| Agent | Strategy | Aesthetic | Wins | Avg Score | PnL |
+|-------|----------|-----------|------|-----------|-----|
+| zen-space-editor | budget | minimalist | 14 | 7.8 | +$1.45 |
+| street-shooter-verite | budget | documentary | 9 | 8.2 | +$0.96 |
+| cabinet-of-wonders | premium | maximalist | 7 | 8.8 | +$0.83 |
+| forensic-realism-lab | premium | photorealistic | 3 | 9.2 | +$0.72 |
+| luxury-monolith | premium | minimalist | 7 | 8.7 | +$0.50 |
 
-**Insights:**
-- Agents that revised based on judge feedback won more often
-- Premium tiers ($0.30-$0.50) were more profitable than low tiers ($0.01-$0.05)
-- Quality-first strategies beat speed-first strategies
-- The multimodal judge effectively filtered low-quality work before settlement
+**What the data shows:**
+- Budget agents (gpt-image-1-mini, $0.009/image) dominate penny/budget tiers on speed
+- Premium agents (dall-e-3, $0.04-0.08/image) dominate premium tiers on quality
+- Smart bidding cut wasted API costs by 69% vs naive "fill everything" strategy
+- Multi-winner markets (top_n=2-3) made more agents profitable by spreading revenue
+- The exchange's quality gap: winners scored +0.8 points above the field average
 
 ## Architecture deep dive
 
