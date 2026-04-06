@@ -238,9 +238,41 @@ def main():
         if i < len(markets):
             time.sleep(args.interval)
 
-    # Fetch detailed market logs
+    # Fetch detailed market logs and enrich results with submission data
     print("\nFetching market details...")
     market_details = fetch_market_details([])
+
+    # Enrich each market result with per-agent submissions from the logs
+    for r in results:
+        prompt_prefix = r["prompt"][:30]
+        # Match market log by prompt prefix (request_id isn't stored in results)
+        matched_detail = None
+        for rid, detail in market_details.items():
+            if detail.get("input", "").startswith(prompt_prefix):
+                matched_detail = detail
+                break
+        if matched_detail:
+            submissions = []
+            for aid, score_data in matched_detail.get("scored", {}).items():
+                cost = estimate_agent_cost(aid, strategies, r["max_price"])
+                submissions.append({
+                    "agent_id": aid,
+                    "initial_score": score_data["score"],
+                    "final_score": score_data["score"],
+                    "score": score_data["score"],
+                    "feedback": score_data.get("feedback", ""),
+                    "cost": cost,
+                    "n_revisions": 0,  # TODO: extract from market log events
+                    "qualified": score_data["score"] >= r["min_quality"],
+                    "latency_ms": r.get("latency_ms", 0) if aid == r.get("winner") else 0,
+                })
+            r["submissions"] = submissions
+            r["n_participants"] = len(submissions)
+            r["n_qualified"] = sum(1 for s in submissions if s["qualified"])
+        else:
+            r["submissions"] = []
+            r["n_participants"] = 0
+            r["n_qualified"] = 0
 
     # Build agent PnL
     agent_pnl = defaultdict(lambda: {
@@ -274,6 +306,29 @@ def main():
                 if aid != detail.get("winner"):
                     agent_pnl[aid]["losses"] += 1
 
+    # Compute economics
+    total_buyer_spend = sum(r["price"] for r in results if r["status"] == "settled")
+    total_agent_costs = sum(pnl["costs"] for pnl in agent_pnl.values())
+    total_agent_revenue = sum(pnl["revenue"] for pnl in agent_pnl.values())
+    exchange_fees = total_buyer_spend * 0.015
+
+    # Price-quality and cost absorption data
+    price_quality = []
+    cost_absorption = []
+    for r in results:
+        if r["status"] == "settled":
+            price_quality.append({
+                "price": r["max_price"], "score": r["score"],
+                "tier": r["tier"], "market_id": r["market_id"],
+            })
+            agent_spend = sum(s["cost"] for s in r.get("submissions", []))
+            if agent_spend > 0:
+                cost_absorption.append({
+                    "market_id": r["market_id"], "tier": r["tier"],
+                    "buyer_paid": r["price"], "agents_spent": agent_spend,
+                    "ratio": agent_spend / r["price"] if r["price"] > 0 else 0,
+                })
+
     # Serialize
     report = {
         "metadata": {
@@ -282,6 +337,17 @@ def main():
             "n_agents": args.agents,
             "total_buyer_budget": total_budget,
             "timeout": args.timeout,
+        },
+        "economics": {
+            "total_buyer_spend": total_buyer_spend,
+            "total_agent_costs": total_agent_costs,
+            "total_agent_revenue": total_agent_revenue,
+            "exchange_fees": exchange_fees,
+            "total_revisions": 0,
+            "successful_revisions": 0,
+            "avg_quality_gap": 0,
+            "cost_absorption_ratio": (total_agent_costs / total_buyer_spend
+                                      if total_buyer_spend > 0 else 0),
         },
         "markets": results,
         "market_details": {
@@ -298,18 +364,45 @@ def main():
                              if pnl["scores"] else 0),
                 "win_rate": (pnl["wins"] / (pnl["wins"] + pnl["losses"])
                             if (pnl["wins"] + pnl["losses"]) > 0 else 0),
+                "n_markets": len(pnl["scores"]),
+                "initial_scores": pnl["scores"],  # for sparklines
+                "revisions_attempted": 0,
+                "revisions_succeeded": 0,
             }
             for aid, pnl in agent_pnl.items()
-            if pnl["scores"]  # only agents that were scored
+            if pnl["scores"]
         },
         "tier_summary": {},
+        "price_quality": price_quality,
+        "cost_absorption": cost_absorption,
     }
+
+    # Compute quality gaps
+    quality_gaps = []
+    for r in results:
+        if r["status"] == "settled" and r.get("submissions"):
+            all_scores = [s["final_score"] for s in r["submissions"]]
+            if all_scores:
+                avg = sum(all_scores) / len(all_scores)
+                quality_gaps.append(r["score"] - avg)
+    if quality_gaps:
+        report["economics"]["avg_quality_gap"] = sum(quality_gaps) / len(quality_gaps)
 
     # Tier summary
     for tier in ["penny", "budget", "stress", "mid", "premium", "creative"]:
         tier_results = [r for r in results if r["tier"] == tier]
         settled = [r for r in tier_results if r["status"] == "settled"]
         timeouts = [r for r in tier_results if r["status"] == "timeout"]
+
+        quality_gap = 0
+        if settled:
+            for r in settled:
+                subs = r.get("submissions", [])
+                if subs:
+                    all_s = [s["final_score"] for s in subs]
+                    quality_gap += r["score"] - sum(all_s) / len(all_s)
+            quality_gap /= len(settled)
+
         report["tier_summary"][tier] = {
             "total": len(tier_results),
             "settled": len(settled),
@@ -320,6 +413,11 @@ def main():
                              if settled else 0),
             "total_volume": sum(r["price"] for r in settled),
             "unique_winners": len(set(r["winner"] for r in settled)),
+            "avg_participants": (sum(r.get("n_participants", 0) for r in tier_results) /
+                                len(tier_results) if tier_results else 0),
+            "avg_qualified": (sum(r.get("n_qualified", 0) for r in tier_results) /
+                             len(tier_results) if tier_results else 0),
+            "quality_gap": quality_gap,
         }
 
     # Save
