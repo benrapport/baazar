@@ -99,6 +99,69 @@ def test_win_rate_empty():
     assert mem.get_win_rate() is None
 
 
+# ── Smart bidding ────────────────────────────────────────────────────
+
+def test_should_bid_negative_margin():
+    mem = AgentMemory()
+    should, reason = mem.should_bid(0.01, 7, 0.02)  # cost > price
+    assert should is False
+    assert "negative margin" in reason
+
+
+def test_should_bid_no_history_good_margin():
+    mem = AgentMemory()
+    should, reason = mem.should_bid(0.10, 7, 0.01)
+    assert should is True
+    assert "exploring" in reason
+
+
+def test_should_bid_no_history_thin_margin():
+    mem = AgentMemory()
+    should, reason = mem.should_bid(0.012, 7, 0.0103)  # 0.0017 margin, < 30%
+    assert should is False
+
+
+def test_should_bid_low_qualification_rate():
+    """Agent that consistently scores below the quality bar should pass."""
+    mem = AgentMemory()
+    for i in range(10):
+        mem.record_attempt(f"req{i}", "t", "r", "m", 0.10, 8)
+        mem.record_score(f"req{i}", 5)  # always below q>=8
+    should, reason = mem.should_bid(0.10, 8, 0.01)
+    assert should is False
+    assert "qualification" in reason.lower() or "EV" in reason
+
+
+def test_should_bid_high_performer():
+    """Agent that consistently wins should keep bidding."""
+    mem = AgentMemory()
+    for i in range(10):
+        mem.record_attempt(f"req{i}", "t", "r", "m", 0.10, 7)
+        mem.record_score(f"req{i}", 9, won=(i % 3 == 0))  # 33% win rate, high scores
+    should, reason = mem.should_bid(0.10, 7, 0.01)
+    assert should is True
+
+
+def test_should_bid_negative_ev():
+    """Agent with low win rate on expensive tasks should pass."""
+    mem = AgentMemory()
+    for i in range(10):
+        mem.record_attempt(f"req{i}", "t", "r", "m", 0.05, 8)
+        mem.record_score(f"req{i}", 8, won=False)  # never wins despite qualifying
+    should, reason = mem.should_bid(0.05, 8, 0.04)  # tight margin, 0% win rate
+    assert should is False
+    assert "EV" in reason
+
+
+def test_qualification_rate():
+    mem = AgentMemory()
+    for i, score in enumerate([5, 6, 7, 8, 9, 10]):
+        mem.record_attempt(f"req{i}", "t", "r", "m")
+        mem.record_score(f"req{i}", score)
+    assert mem.estimate_qualification_rate(8) == 3 / 6  # 8, 9, 10 qualify
+    assert mem.estimate_qualification_rate(5) == 6 / 6  # all qualify
+
+
 # ── Context building ─────────────────────────────────────────────────
 
 def test_build_context_empty():

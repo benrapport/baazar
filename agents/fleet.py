@@ -124,14 +124,20 @@ class ImageFleet:
         cost_per_attempt = image_cost + thinking_cost
         total_cost = cost_per_attempt  # tracks cumulative cost across revisions
 
-        if max_price - total_cost < 0:
-            logger.info(f"[{agent_id}] PASS — negative margin at ${max_price}")
-            await self._notify(request_id, agent_id, "pass", "negative margin")
+        # Smart bidding: should we even compete?
+        n_agents = len(self.strategies)
+        should_fill, reason = memory.should_bid(
+            max_price, min_quality, cost_per_attempt, n_agents
+        )
+        if not should_fill:
+            logger.info(f"[{agent_id}] PASS — {reason}")
+            await self._notify(request_id, agent_id, "pass", reason)
             return
 
         logger.info(
             f"[{agent_id}] FILL — {model} {size} "
-            f"cost=${cost_per_attempt:.4f} margin=${max_price - total_cost:.4f}"
+            f"cost=${cost_per_attempt:.4f} margin=${max_price - total_cost:.4f} "
+            f"({reason})"
         )
         await self._notify(request_id, agent_id, "fill")
 
@@ -140,7 +146,8 @@ class ImageFleet:
             rewritten = await asyncio.to_thread(
                 self._rewrite_prompt, strategy, user_prompt, model, memory
             )
-            memory.record_attempt(request_id, user_prompt, rewritten, model)
+            memory.record_attempt(request_id, user_prompt, rewritten, model,
+                                  max_price, min_quality)
 
             data_uri = await asyncio.to_thread(
                 generate_image, rewritten, model, size, quality

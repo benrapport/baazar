@@ -20,6 +20,8 @@ class Attempt:
     score: int | None = None
     feedback: str = ""
     won: bool = False
+    max_price: float = 0.0
+    min_quality: int = 0
 
 
 class AgentMemory:
@@ -32,12 +34,15 @@ class AgentMemory:
         self._pending: dict[str, Attempt] = {}
 
     def record_attempt(self, request_id: str, task: str,
-                       rewritten_prompt: str, model: str):
+                       rewritten_prompt: str, model: str,
+                       max_price: float = 0.0, min_quality: int = 0):
         """Record an attempt before the score is known."""
         attempt = Attempt(
             task=task,
             rewritten_prompt=rewritten_prompt,
             model=model,
+            max_price=max_price,
+            min_quality=min_quality,
         )
         self._pending[request_id] = attempt
 
@@ -85,6 +90,70 @@ class AgentMemory:
         if not scored:
             return None
         return sum(1 for a in scored if a.won) / len(scored)
+
+    def estimate_qualification_rate(self, min_quality: int) -> float:
+        """What fraction of my past attempts would have met this quality bar?"""
+        scored = self.scored_attempts
+        if not scored:
+            return 0.5  # optimistic prior with no data
+        qualified = sum(1 for a in scored if a.score >= min_quality)
+        return qualified / len(scored)
+
+    def estimate_win_rate_at_bar(self, min_quality: int) -> float:
+        """Of my past attempts that met a similar quality bar, how often did I win?"""
+        relevant = [a for a in self.scored_attempts
+                    if a.min_quality >= min_quality - 1]
+        if not relevant:
+            return self.get_win_rate() or 0.2  # fallback
+        won = sum(1 for a in relevant if a.won)
+        return won / len(relevant)
+
+    def should_bid(self, max_price: float, min_quality: int,
+                   cost_per_attempt: float, n_competitors: int = 10) -> tuple[bool, str]:
+        """Decide whether to bid on a market based on expected value.
+
+        Returns (should_fill, reason).
+        """
+        scored = self.scored_attempts
+        margin = max_price - cost_per_attempt
+
+        # Always pass if margin is negative
+        if margin <= 0:
+            return False, f"negative margin (${margin:.4f})"
+
+        # With no history, be willing to explore (but require positive margin)
+        if len(scored) < 3:
+            if margin > cost_per_attempt * 0.3:  # need at least 30% margin
+                return True, "exploring (insufficient history)"
+            return False, f"thin margin for exploration (${margin:.4f})"
+
+        # Estimate qualification probability
+        qual_rate = self.estimate_qualification_rate(min_quality)
+
+        # Estimate win probability (given we qualify)
+        # With N competitors, assume uniform chance among qualifiers
+        # But adjust based on our historical win rate
+        historical_win_rate = self.get_win_rate() or 0.1
+        # Blend: 60% historical, 40% naive (1/competitors)
+        naive_win_rate = qual_rate / max(n_competitors * 0.5, 1)
+        est_win_prob = 0.6 * historical_win_rate + 0.4 * naive_win_rate
+
+        # Expected value = P(win) * revenue - cost
+        expected_revenue = est_win_prob * max_price
+        expected_value = expected_revenue - cost_per_attempt
+
+        if expected_value <= 0:
+            return False, (f"negative EV (${expected_value:.4f}): "
+                          f"P(qual)={qual_rate:.0%} P(win)={est_win_prob:.0%} "
+                          f"rev=${expected_revenue:.4f} cost=${cost_per_attempt:.4f}")
+
+        # Also check: can I even meet the quality bar?
+        if qual_rate < 0.2 and len(scored) >= 5:
+            return False, (f"low qualification rate ({qual_rate:.0%}) "
+                          f"for q>={min_quality}")
+
+        return True, (f"EV=${expected_value:.4f}: "
+                     f"P(qual)={qual_rate:.0%} P(win)={est_win_prob:.0%}")
 
     def build_context(self) -> str:
         """Build few-shot context string for prompt rewriting.
