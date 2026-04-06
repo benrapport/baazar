@@ -10,6 +10,7 @@ import time
 import uuid
 
 import json as _json
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Header
 from fastapi.responses import StreamingResponse
@@ -210,6 +211,9 @@ async def register_agent(reg: AgentRegistration):
     return {"status": "registered", "agent_id": agent.agent_id}
 
 
+_IMAGE_SAVE_DIR = os.environ.get("BAZAAR_IMAGE_DIR", "")
+
+
 @app.post("/submit/{request_id}")
 async def submit_work(request_id: str, sub: SubmissionPayload):
     """Agent submits work for an active request."""
@@ -221,9 +225,33 @@ async def submit_work(request_id: str, sub: SubmissionPayload):
     if not accepted:
         raise HTTPException(400, "Submission rejected (market closed)")
 
+    # Save image to disk if configured
+    if _IMAGE_SAVE_DIR and sub.work.startswith("data:image/"):
+        _save_image(request_id, sub.agent_id, sub.work)
+
     emit_event("submission", request_id=request_id, agent_id=sub.agent_id)
     logger.info(f"[{request_id}] Submission from {sub.agent_id}")
     return {"status": "accepted", "agent_id": sub.agent_id}
+
+
+def _save_image(request_id: str, agent_id: str, data_uri: str):
+    """Save a base64 image submission to disk."""
+    import base64
+    try:
+        save_dir = Path(_IMAGE_SAVE_DIR) / request_id
+        save_dir.mkdir(parents=True, exist_ok=True)
+        # Extract base64 data after the header
+        _, b64 = data_uri.split(",", 1)
+        img_bytes = base64.b64decode(b64)
+        # Determine revision number from existing files
+        existing = list(save_dir.glob(f"{agent_id}*.png"))
+        rev = len(existing)
+        filename = f"{agent_id}_r{rev}.png" if rev > 0 else f"{agent_id}.png"
+        path = save_dir / filename
+        path.write_bytes(img_bytes)
+        logger.debug(f"Saved image: {path} ({len(img_bytes)} bytes)")
+    except Exception as e:
+        logger.warning(f"Failed to save image for {agent_id}: {e}")
 
 
 @app.get("/feedback/{request_id}/{agent_id}")

@@ -53,10 +53,14 @@ def cleanup():
                 pass
 
 
-def start_exchange():
+def start_exchange(image_dir: str = ""):
+    env = dict(os.environ)
+    if image_dir:
+        env["BAZAAR_IMAGE_DIR"] = image_dir
     proc = subprocess.Popen(
         [sys.executable, str(ROOT / "demo" / "run_exchange.py")],
-        cwd=str(ROOT), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        cwd=str(ROOT), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        env=env)
     PROCS.append(proc)
     for _ in range(30):
         try:
@@ -201,9 +205,13 @@ def main():
     print()
 
     # Start infrastructure
+    out_dir = Path(args.output)
+    out_dir.mkdir(exist_ok=True)
+    image_dir = str(out_dir / "images")
+
     print("[1/3] Starting exchange...")
-    start_exchange()
-    print("  Exchange ready")
+    start_exchange(image_dir=image_dir)
+    print(f"  Exchange ready (images → {image_dir})")
 
     print(f"[2/3] Starting {args.agents}-agent fleet...")
     n = start_fleet(args.agents)
