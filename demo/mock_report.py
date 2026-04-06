@@ -539,7 +539,9 @@ document.querySelector('#atbl tbody').innerHTML=sparkTBody;
 document.getElementById('ttbl').innerHTML='<table><thead><tr><th>Tier</th><th>N</th><th>OK</th><th>Fail</th><th>Avg</th><th>Gap</th></tr></thead><tbody>'+TO.filter(function(t){return D.tier_summary[t]&&D.tier_summary[t].total>0}).map(function(t){var s=D.tier_summary[t];return'<tr><td><span class="tc tc-'+t+'">'+t.substring(0,3)+'</span></td><td>'+s.total+'</td><td>'+s.settled+'</td><td class="'+(s.timeouts?'n':'')+'">'+s.timeouts+'</td><td>'+(s.avg_score?s.avg_score.toFixed(1):'—')+'</td><td class="p">+'+s.quality_gap.toFixed(1)+'</td></tr>'}).join('')+'</tbody></table>';
 
 document.getElementById('sdist').innerHTML=TO.filter(function(t){return D.tier_summary[t]&&D.tier_summary[t].total>0}).map(function(t){
-  var all_scores=D.tier_summary[t].all_scores,bk=Array(10).fill(0);
+  var all_scores=D.tier_summary[t].all_scores||[];
+  if(!all_scores.length){D.markets.forEach(function(m){if(m.tier===t)(m.submissions||[]).forEach(function(s){all_scores.push(s.final_score||s.score||0)})})}
+  var bk=Array(10).fill(0);
   all_scores.forEach(function(s){bk[Math.min(Math.max(s,1),10)-1]++});
   var mx=Math.max.apply(null,bk.concat([1]));
   return'<div style="flex:1;min-width:80px"><div style="font-size:.65em;color:'+TC[t]+';margin-bottom:2px">'+t+' n='+all_scores.length+'</div><div style="display:flex;align-items:flex-end;height:40px;gap:1px">'+bk.map(function(c,i){var h=c/mx*40,cl=i>=7?'#2e7d32':(i>=5?'#f9a825':'#c62828');return'<div style="flex:1;background:'+cl+';height:'+h+'px;border-radius:1px 1px 0 0" title="'+(i+1)+': '+c+'"></div>'}).join('')+'</div></div>'
